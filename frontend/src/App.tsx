@@ -103,6 +103,7 @@ export default function App() {
   const [outputFiles, setOutputFiles] = useState<OutputFile[]>([]);
   const [editGuidelines, setEditGuidelines] = useState('');
   const [editAssetsDir, setEditAssetsDir] = useState('');
+  const [appVersion, setAppVersion] = useState('1.2.3');
   const [toast, setToast] = useState('');
 
   // New brand form
@@ -134,6 +135,7 @@ export default function App() {
     }).catch(() => {});
     fetch('/api/recipes').then(r => r.json()).then(setRecipes).catch(() => {});
     fetch('/api/settings').then(r => r.json()).then(setSettings).catch(() => {});
+    fetch('/api/health').then(r => r.json()).then(d => { if (d.version) setAppVersion(d.version); }).catch(() => {});
     loadOutputs();
   }, []);
 
@@ -439,7 +441,7 @@ export default function App() {
               </div>
               <div>
                 <div className="text-xs font-bold leading-none">AjansOS Studio</div>
-                <div className="text-[11px] text-zinc-400 mt-1">FramioMedia • v1.0</div>
+                <div className="text-[11px] text-zinc-400 mt-1">FramioMedia • v{appVersion}</div>
               </div>
             </div>
             <span className="w-2 h-2 rounded-full bg-emerald-400" title="Backend & DB Bağlı" />

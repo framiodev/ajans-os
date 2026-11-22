@@ -26,10 +26,14 @@ app.use(express.json());
 
 // Health & Status
 app.get('/api/health', (_req, res) => {
+  let version = '1.2.3';
+  try {
+    version = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8')).version || version;
+  } catch {}
   res.json({
     ok: true,
     app: 'FramioMedia AjansOS Backend',
-    version: '1.0.0',
+    version,
     services: {
       database: 'connected',
       photoshopMcp: 'ready',
