@@ -184,14 +184,11 @@ export default function App() {
   };
 
   const handleCheckUpdate = async () => {
-    notify('GitHub üzerinden güncelleme kontrol ediliyor...');
+    notify('Uygulama içi güncelleme kontrol ediliyor...');
     try {
       const res = await fetch('/api/system/check-update');
       const data = await res.json();
       notify(data.message || 'Güncelleme durumu alındı.');
-      if (data.updateAvailable && data.releaseUrl) {
-        window.open(data.releaseUrl, '_blank');
-      }
     } catch {
       notify('Güncelleme sunucusuna ulaşılamadı.');
     }

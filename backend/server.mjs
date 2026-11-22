@@ -318,27 +318,13 @@ app.get('/api/knowledge/adobe-2027', (_req, res) => {
 
 app.get('/api/system/check-update', async (_req, res) => {
   try {
-    const pkgPath = path.resolve(__dirname, '../package.json');
-    const currentVersion = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || '1.1.0';
-    const ghRes = await fetch('https://api.github.com/repos/framiodev/ajans-os/releases/latest', {
-      headers: { 'User-Agent': 'FramioMedia-AjansOS' }
-    });
-    if (!ghRes.ok) {
-      return res.json({ ok: true, currentVersion, latestVersion: currentVersion, updateAvailable: false, message: `Güncelsiniz (v${currentVersion})` });
+    if (typeof global.triggerAjansUpdateCheck === 'function') {
+      const result = await global.triggerAjansUpdateCheck();
+      return res.json(result);
     }
-    const release = await ghRes.json();
-    const latestVersion = String(release.tag_name || currentVersion).replace(/^v/i, '');
-    const updateAvailable = latestVersion !== currentVersion;
-    res.json({
-      ok: true,
-      currentVersion,
-      latestVersion,
-      updateAvailable,
-      releaseUrl: release.html_url || 'https://github.com/framiodev/ajans-os/releases',
-      message: updateAvailable
-        ? `Yeni sürüm mevcut: v${latestVersion} (Mevcut: v${currentVersion})`
-        : `Uygulama güncel (v${currentVersion})`
-    });
+    const pkgPath = path.resolve(__dirname, '../package.json');
+    const currentVersion = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || '1.2.5';
+    res.json({ ok: true, currentVersion, message: `Uygulama güncel (v${currentVersion})` });
   } catch (err) {
     res.json({ ok: false, message: 'Güncelleme kontrolü yapılamadı: ' + err.message });
   }

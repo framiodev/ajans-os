@@ -50,6 +50,20 @@ async function createWindow() {
   await mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
 
   // GitHub Releases Otomatik Güncelleme Kontrolü
+  global.triggerAjansUpdateCheck = async () => {
+    if (!app.isPackaged) return { ok: true, message: 'Geliştirme modunda otomatik güncelleme kapalı.' };
+    try {
+      const res = await autoUpdater.checkForUpdates();
+      const latest = res?.updateInfo?.version;
+      if (latest && latest !== app.getVersion()) {
+        return { ok: true, message: `Yeni sürüm bulundu (v${latest}). Arka planda indiriliyor, bitince kurulum penceresi açılacak...` };
+      }
+      return { ok: true, message: `Uygulama güncel (v${app.getVersion()}).` };
+    } catch (e) {
+      return { ok: false, message: 'Güncelleme kontrol hatası: ' + e.message };
+    }
+  };
+
   if (app.isPackaged) {
     autoUpdater.autoDownload = true;
     autoUpdater.on('update-downloaded', (info) => {
