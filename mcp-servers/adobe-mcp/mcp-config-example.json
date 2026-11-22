@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "framiomedia-adobe-mcp": {
+      "command": "node",
+      "args": [
+        "D:\\Programlar\\FramioMedia\\AjansOS\\mcp-servers\\adobe-mcp\\mcpServer.mjs"
+      ]
+    }
+  }
+}

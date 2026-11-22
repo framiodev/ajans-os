@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+.grid-overlay {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+  background-size: 25% 25%;
+}
+
+.safe-zone {
+  border: 1px dashed rgba(250, 204, 21, 0.7);
+}

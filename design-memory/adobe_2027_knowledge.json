@@ -1,0 +1,55 @@
+{
+  "version": "Adobe MAX 2026 / 2027 Lineup",
+  "updatedAt": "2026-11-22",
+  "photoshop_2027": [
+    {
+      "name": "Relight",
+      "category": "Generative Lighting",
+      "description": "Sahneye 3 adede kadar etkileşimli sanal ışık kaynağı ekleyen, tahribatsız (non-destructive) Relight katmanı ile ışık yönü, rengi, boyutu ve yoğunluğunu yapay zeka ile harmanlar."
+    },
+    {
+      "name": "Generative Recompose",
+      "category": "Smart Framing",
+      "description": "Görselleri 4:5 Post, 9:16 Story veya 16:9 LinkedIn oranlarına ana özneyi kaydırıp arka planı akıllıca doldurarak uyarlar; metin için temiz negatif alan açar."
+    },
+    {
+      "name": "Generative Restyle",
+      "category": "Style Transfer",
+      "description": "Mevcut bir fotoğrafın görsel stilini metin promptuyla değiştirir ve yeniden prompt yazmadan yoğunluk sürgüsüyle ince ayar yapılmasını sağlar."
+    },
+    {
+      "name": "Remove Tool (Related Elements)",
+      "category": "Cleanup",
+      "description": "İstenmeyen objelerle birlikte gölgeleri, yansımaları, ayak izlerini ve duman/buhar gibi ilişkili çevresel öğeleri tek seferde temizler."
+    },
+    {
+      "name": "Convert to Text Layers & Camera Angles & Mockups (Beta)",
+      "category": "Productivity",
+      "description": "Düz görsellerdeki yazıları düzenlenebilir metin katmanına çevirir, kamera açısını değiştirir ve tasarımları ürün mockup'larına otomatik yerleştirir."
+    }
+  ],
+  "firefly_2027": [
+    {
+      "name": "Firefly Design (Beta)",
+      "description": "Görsel düzenleme, vektör, animasyon, 3D ve baskı düzenini tek tuvalde birleştiren AI Creative Studio."
+    },
+    {
+      "name": "Firefly Graph & Quick Actions",
+      "description": "Çok adımlı tasarım ve fotoğraf işleme akışlarını düğüm tabanlı (node-based) otomatikleştiren sistem."
+    },
+    {
+      "name": "Firefly Builder & Generative Media",
+      "description": "Prompttan etkileşimli arayüz prototipleri ve videoya uygun özel müzik/ses efektleri üretimi."
+    }
+  ],
+  "creative_cloud_mcp_2027": [
+    {
+      "name": "Resmi Yerel MCP (Model Context Protocol)",
+      "description": "2027 başında genişleyecek yerel MCP desteği ile Claude ve Gemini gibi ajanlar Photoshop/Illustrator katmanlarını ve vektörlerini doğrudan düzenlenebilir şekilde yönetebilir."
+    },
+    {
+      "name": "Brand Intelligence Across Apps",
+      "description": "Marka renkleri, tipografi ve .md kurallarının Illustrator, Photoshop ve InDesign genelinde otomatik korunması."
+    }
+  ]
+}
