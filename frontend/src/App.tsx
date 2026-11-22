@@ -181,6 +181,20 @@ export default function App() {
     cta: 'Detaylı Bilgi →'
   };
 
+  const handleCheckUpdate = async () => {
+    notify('GitHub üzerinden güncelleme kontrol ediliyor...');
+    try {
+      const res = await fetch('/api/system/check-update');
+      const data = await res.json();
+      notify(data.message || 'Güncelleme durumu alındı.');
+      if (data.updateAvailable && data.releaseUrl) {
+        window.open(data.releaseUrl, '_blank');
+      }
+    } catch {
+      notify('Güncelleme sunucusuna ulaşılamadı.');
+    }
+  };
+
   const handleSaveSettings = async () => {
     await fetch('/api/settings', {
       method: 'POST',
@@ -493,7 +507,12 @@ export default function App() {
           <div className="flex justify-between"><span className="text-zinc-400">Photoshop / AI MCP</span><span className="text-emerald-400 font-medium">Hazır</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Adobe Firefly</span><span className="text-amber-400 font-medium">Entegre</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Gemini + Claude</span><span className="text-zinc-200 font-mono">API</span></div>
-          <div className="pt-2 border-t border-zinc-800 font-mono text-[10px] text-zinc-500 truncate">D:\Programlar\FramioMedia\AjansOS</div>
+          <div className="pt-2 border-t border-zinc-800 space-y-2">
+            <button onClick={handleCheckUpdate} className="w-full py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 text-[11px] font-medium text-zinc-200 cursor-pointer">
+              Güncellemeleri Denetle
+            </button>
+            <div className="font-mono text-[10px] text-zinc-500 truncate">D:\Programlar\FramioMedia\AjansOS</div>
+          </div>
         </div>
       </aside>
 
