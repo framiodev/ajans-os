@@ -1,0 +1,131 @@
+[
+  {
+    "id": "yt-piximperfect",
+    "title": "PiXimperfect — Sinematik Işık, Renk Uyumu & Photoshop 2027 Relight",
+    "source_url": "https://www.youtube.com/@PiXimperfect",
+    "source_type": "youtube",
+    "steps": [
+      "Özne ve arka plan parlaklığını Curves + Luminosity Check katmanıyla eşitle",
+      "Color Balance ile arka planın ortam rengini öznenin kenarlarına rim light olarak yansıt",
+      "Photoshop 2027 Relight katmanı ile 2 noktalı stüdyo ışığı ekle",
+      "Blend If kullanarak gölgeleri doğal şekilde arka plan dokusuna kaynaştır"
+    ]
+  },
+  {
+    "id": "yt-texturelabs",
+    "title": "Texturelabs — Editoryal Tipografi, Doku & Poster Efektleri",
+    "source_url": "https://www.youtube.com/@Texturelabs",
+    "source_type": "youtube",
+    "steps": [
+      "Büyük H1 başlıkta sıkı satır aralığı (leading) ve hafif negatif tracking kullan",
+      "Arka plan üzerine %8-12 opaklıkta film grain / kağıt dokusu (Overlay) ekle",
+      "Metin ve görsel arasında ince 1px dergi çerçeve çizgileri (hairline) yerleştir",
+      "Vurgu kelimelerinde yüksek kontrastlı marka accent rengi kullan"
+    ]
+  },
+  {
+    "id": "yt-satori",
+    "title": "Satori Graphics — Grid Sistemleri, Whitespace & Ajans Kompozisyonu",
+    "source_url": "https://www.youtube.com/@SatoriGraphics",
+    "source_type": "youtube",
+    "steps": [
+      "12 kolonlu grid ve 60-84px kenar güvenli alanı (safe zone) tanımla",
+      "Görselin en az %30'unu temiz negatif alan (whitespace) olarak bırak",
+      "Tipografi hiyerarşisini 3 seviyede tut: Eyebrow (1x), Başlık (3.5x), Alt Metin (1.2x)",
+      "Tek bir net odak noktası (focal point) ve tek bir CTA butonu kullan"
+    ]
+  },
+  {
+    "id": "yt-dansky",
+    "title": "Dansky — Sosyal Medya Reklam Postu & Çoklu Format Uyarlama",
+    "source_url": "https://www.youtube.com/@ForeverDansky",
+    "source_type": "youtube",
+    "steps": [
+      "Ana tasarımı 4:5 (1080x1350) formatında katman gruplarıyla (Header, Hero, Copy, CTA) kur",
+      "Story (9:16) uyarlamasında üst ve alttan 250px UI güvenli alanı boş bırak",
+      "Marka logosunu Smart Object olarak yerleştirerek tüm formatlarda tutarlılık sağla",
+      "Illustrator vektör ikonlarını Smart Object olarak Photoshop'a aktar"
+    ]
+  },
+  {
+    "id": "yt-benny",
+    "title": "Benny Productions — Ürün Manipülasyonu & Gerçekçi Gölgeleme",
+    "source_url": "https://www.youtube.com/@BennyProductions",
+    "source_type": "youtube",
+    "steps": [
+      "Ürün altına 2 katmanlı gölge ekle: keskin temas gölgesi (contact shadow) + yumuşak ortam gölgesi",
+      "Ürün kenarlarına arka plan ışığına uygun ince rim highlight boya",
+      "Arka plan derinliği için hafif Lens Blur / Gaussian Blur ile odak ayır",
+      "Son adımda Camera Raw Filter ile genel kontrast ve renk harmonisi ver"
+    ]
+  },
+  {
+    "id": "yt-afgan",
+    "title": "Afgan Rasulov — Türkçe Reklam Afişi & Sosyal Medya Tasarım Akışı",
+    "source_url": "https://www.youtube.com/@afganrasulov",
+    "source_type": "youtube",
+    "steps": [
+      "Türkçe karakter destekli modern sans-serif / display font çifti seç",
+      "Arka plan görseli üzerine okunabilirlik için yumuşak karanlık gradient scrim ekle",
+      "Kampanya mesajını 3-5 kelimelik vurucu başlığa indirge",
+      "Yüksek çözünürlüklü PNG + düzenlenebilir katmanlı PSD olarak kaydet"
+    ]
+  },
+  {
+    "id": "yt-onurnaci",
+    "title": "Onur Naci Öztürkler — Modern Sosyal Medya İçerik & Yaratıcı Reklam",
+    "source_url": "https://www.youtube.com/@OnurNaciOzturkler",
+    "source_type": "youtube",
+    "steps": [
+      "İlk 2 saniyede dikkat çeken güçlü görsel kanca (visual hook) oluştur",
+      "Başlığın bir kısmını özne maskesiyle derinlik katarak arkaya yerleştir",
+      "Marka renk paletinde 60-30-10 kuralını uygula (ana, ikincil, vurgu)",
+      "Mobilde küçük ekranda okunabilirliği %50 zoom ile test et"
+    ]
+  },
+  {
+    "id": "yt-tasarimadair",
+    "title": "Tasarıma Dair — Kurumsal Kimlik & Marka Dili Tutarlılığı",
+    "source_url": "https://www.youtube.com/@TasarimaDair",
+    "source_type": "youtube",
+    "steps": [
+      "Marka .md rehberindeki hedef kitle ve ton kurallarını tasarıma yansıt",
+      "Tüm aylık gönderilerde sabit logo konumu ve tutarlı rozet/buton stili kullan",
+      "Kurumsal sektörlerde (emlak, sağlık, finans) temiz ve güven veren boşluk dengesi kur"
+    ]
+  },
+  {
+    "id": "yt-grafikdersleri",
+    "title": "Grafik Tasarım Dersleri (Mustafa Öztürk) — Afiş & E-Ticaret Banner",
+    "source_url": "https://www.youtube.com/@GrafikTasarimDersleri",
+    "source_type": "youtube",
+    "steps": [
+      "Ürün ve fiyat/kampanya rozetini görsel akış (Z veya F okuma düzeni) üzerinde konumlandır",
+      "Farklı banner oranlarında metin taşmasını önlemek için sabit hizalama kılavuzları kullan",
+      "Baskı ve dijital çıktılar için renk profilini (RGB/CMYK) doğru ayarla"
+    ]
+  },
+  {
+    "id": "yt-tasarimkafasi",
+    "title": "Tasarım Kafası — Hızlı Ajans Postu & Müşteri Revize Teknikleri",
+    "source_url": "https://www.youtube.com/@TasarimKafasi",
+    "source_type": "youtube",
+    "steps": [
+      "Katmanları Türkçe ve anlaşılır gruplara ayır (Logo, Metin, CTA, Arka_Plan)",
+      "Müşteri revizelerini saniyeler içinde yapmak için Smart Object ve Text Layer koru",
+      "Her tasarımda tek bir ana mesaj ve net harekete geçirici buton (CTA) bulundur"
+    ]
+  },
+  {
+    "id": "yt-hasancankeles",
+    "title": "Hasan Can Keleş — Sosyal Medya Tasarımı, Marka Stratejisi & Reklam Kurgusu",
+    "source_url": "https://www.youtube.com/@hasancankeles",
+    "source_type": "youtube",
+    "steps": [
+      "Sektöre özel hedef kitle psikolojisine uygun başlık ve görsel hikâye kurgula",
+      "Sosyal medya akışında durduran (scroll-stopper) yüksek kontrastlı kompozisyon kullan",
+      "Marka kimliği, tipografi ve renk bütünlüğünü tüm aylık içerik takvimine yay",
+      "Tasarımı sadece estetik değil, dönüşüm (lead / satış) odaklı CTA ile tamamla"
+    ]
+  }
+]

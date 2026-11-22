@@ -83,16 +83,20 @@ if (brandCount === 0) {
   insertBrand.run('aura', 'Aura Dental Klinik', 'Sağlık & Estetik Diş', 'Bilgilendirici, ferah, güvenilir', '#083344', '#0E7490', '#E0F2FE', 'Plus Jakarta Sans', 'auradental.com');
 }
 
-// Seed initial recipes if empty
-const recipeCount = db.prepare('SELECT COUNT(*) as c FROM recipes').get().c;
-if (recipeCount === 0) {
-  const insertRecipe = db.prepare(`
-    INSERT INTO recipes (id, title, source_url, source_type, steps_count, steps_json)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  insertRecipe.run('rec-1', 'Kurumsal Portre Işık & Gradient Maskeleme', 'https://youtube.com', 'youtube', 12, JSON.stringify(['Artboard 1080x1350', 'Firefly Negatif Alan', 'Soft Dark Gradient', 'Tipografi Hiyerarşisi']));
-  insertRecipe.run('rec-2', 'Restoran Yemek Camera Raw Renk Tonlama', 'https://youtube.com', 'youtube', 9, JSON.stringify(['Warm Highlights', 'Vignette Odak', 'Serif Başlık', 'CTA Kontrast']));
-}
+// Seed curated YouTube design recipes (11 Turkish & Global channels incl. Hasan Can Keleş)
+try {
+  const ytSeedPath = path.resolve(__dirname, '../design-memory/youtube_design_recipes.json');
+  if (fs.existsSync(ytSeedPath)) {
+    const ytRecipes = JSON.parse(fs.readFileSync(ytSeedPath, 'utf8'));
+    const insRec = db.prepare(`
+      INSERT OR IGNORE INTO recipes (id, title, source_url, source_type, steps_count, steps_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    for (const r of ytRecipes) {
+      insRec.run(r.id, r.title, r.source_url || '', r.source_type || 'youtube', (r.steps || []).length, JSON.stringify(r.steps || []));
+    }
+  }
+} catch {}
 
 // Seed default settings
 const defaultSettings = [
