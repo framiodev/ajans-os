@@ -34,7 +34,11 @@ jobs:
       - name: Build Windows Installer (.exe + latest.yml)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npm run build:exe
+        run: |
+          cd frontend
+          npm run build
+          cd ..
+          npx electron-builder --win nsis --publish never
 
       - name: Read Version
         id: pkg
