@@ -31,8 +31,27 @@ jobs:
         working-directory: frontend
         run: npm install
 
-      - name: Build & Publish Windows Installer to GitHub Releases
+      - name: Build Windows Installer (.exe + latest.yml)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npm run release
+        run: npm run build:exe
+
+      - name: Read Version
+        id: pkg
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json | ConvertFrom-Json).version
+          echo "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.version }}
+          name: FramioMedia AjansOS v${{ steps.pkg.outputs.version }}
+          draft: false
+          files: |
+            release/*.exe
+            release/*.blockmap
+            release/latest.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
