@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { safeFormat, safeSegment } from '../../backend/security.mjs';
 
 function findPhotoshopExe() {
   const adobeDir = 'C:\\Program Files\\Adobe';
@@ -36,10 +37,10 @@ async function runPhotoshopJsx(jsxCode) {
   const wrappedJsx = `
     try {
       ${jsxCode}
-      var df = new File("${doneFile}");
+      var df = new File("${escapeJsx(doneFile)}");
       df.open("w"); df.write("OK"); df.close();
     } catch (e) {
-      var ef = new File("${doneFile}");
+      var ef = new File("${escapeJsx(doneFile)}");
       ef.open("w"); ef.write("ERR:" + e.message); ef.close();
     }
   `;
@@ -63,12 +64,13 @@ async function runPhotoshopJsx(jsxCode) {
 }
 
 export async function generateProEditorialJsx({ brand, copy, format = 'post', heroImagePath = '', outputDir }) {
+  format = safeFormat(format);
   const dims =
     format === 'story' ? { w: 1080, h: 1920 } : format === 'linkedin' ? { w: 1920, h: 1080 } : { w: 1080, h: 1350 };
 
   const bg = hexToRgb(brand.primary_color);
   const acc = hexToRgb(brand.accent_color);
-  const safeName = `${brand.id}_${format}_pro_${Date.now()}`;
+  const safeName = `${safeSegment(brand.id, 'brand')}_${format}_pro_${Date.now()}`;
   const jsxPath = path.join(outputDir, `${safeName}.jsx`);
   const psdPath = path.join(outputDir, `${safeName}.psd`).replace(/\\/g, '/');
   const pngPath = path.join(outputDir, `${safeName}.png`).replace(/\\/g, '/');
@@ -160,8 +162,8 @@ addText("Footer_Web", "${escapeJsx(brand.website || 'framiomedia.com')}", 16, 84
 
 var psdOpts = new PhotoshopSaveOptions();
 psdOpts.layers = true;
-doc.saveAs(new File("${psdPath}"), psdOpts, true, Extension.LOWERCASE);
-doc.saveAs(new File("${pngPath}"), new PNGSaveOptions(), true, Extension.LOWERCASE);
+doc.saveAs(new File("${escapeJsx(psdPath)}"), psdOpts, true, Extension.LOWERCASE);
+doc.saveAs(new File("${escapeJsx(pngPath)}"), new PNGSaveOptions(), true, Extension.LOWERCASE);
 `;
 
   await fs.mkdir(outputDir, { recursive: true });
@@ -170,12 +172,13 @@ doc.saveAs(new File("${pngPath}"), new PNGSaveOptions(), true, Extension.LOWERCA
 }
 
 export async function generatePostPsd({ brand, copy, format = 'post', outputDir }) {
+  format = safeFormat(format);
   const dims =
     format === 'story' ? { w: 1080, h: 1920 } : format === 'linkedin' ? { w: 1920, h: 1080 } : { w: 1080, h: 1350 };
 
   const bg = hexToRgb(brand.primary_color);
   const acc = hexToRgb(brand.accent_color);
-  const safeName = `${brand.id}_${format}_${Date.now()}`;
+  const safeName = `${safeSegment(brand.id, 'brand')}_${format}_${Date.now()}`;
   const psdPath = path.join(outputDir, `${safeName}.psd`).replace(/\\/g, '/');
   const pngPath = path.join(outputDir, `${safeName}.png`).replace(/\\/g, '/');
 
@@ -219,10 +222,10 @@ export async function generatePostPsd({ brand, copy, format = 'post', outputDir 
     // 3. PSD ve PNG Kaydet
     var psdOpts = new PhotoshopSaveOptions();
     psdOpts.layers = true;
-    doc.saveAs(new File("${psdPath}"), psdOpts, true, Extension.LOWERCASE);
+    doc.saveAs(new File("${escapeJsx(psdPath)}"), psdOpts, true, Extension.LOWERCASE);
 
     var pngOpts = new PNGSaveOptions();
-    doc.saveAs(new File("${pngPath}"), pngOpts, true, Extension.LOWERCASE);
+    doc.saveAs(new File("${escapeJsx(pngPath)}"), pngOpts, true, Extension.LOWERCASE);
   `;
 
   await fs.mkdir(outputDir, { recursive: true });
@@ -239,7 +242,7 @@ export async function revisePhotoshopLayer({ psdPath, instruction }) {
   const cleanPng = cleanPsd.replace(/\.psd$/i, '.png');
 
   const jsx = `
-    var f = new File("${cleanPsd}");
+    var f = new File("${escapeJsx(cleanPsd)}");
     if (f.exists) {
       var doc = app.open(f);
       try {
@@ -251,7 +254,7 @@ export async function revisePhotoshopLayer({ psdPath, instruction }) {
       var psdOpts = new PhotoshopSaveOptions();
       psdOpts.layers = true;
       doc.saveAs(f, psdOpts, true, Extension.LOWERCASE);
-      doc.saveAs(new File("${cleanPng}"), new PNGSaveOptions(), true, Extension.LOWERCASE);
+      doc.saveAs(new File("${escapeJsx(cleanPng)}"), new PNGSaveOptions(), true, Extension.LOWERCASE);
     }
   `;
 

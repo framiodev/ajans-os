@@ -24,10 +24,10 @@ Sadece geçerli JSON döndür:
   "critique": "2 cümlelik net Türkçe değerlendirme",
   "autoFixInstruction": "Eğer puan 90 altındaysa Photoshop MCP için tek cümlelik düzeltme komutu, yoksa boş string"
 }`;
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey },
         body: JSON.stringify({
           contents: [
             {

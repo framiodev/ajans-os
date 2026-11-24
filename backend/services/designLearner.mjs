@@ -28,12 +28,12 @@ export async function extractYoutubeRecipe({ url, topic }) {
 
   if (geminiKey) {
     try {
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
       const prompt = `Şu YouTube tasarım eğitimi / konusu için Adobe Photoshop MCP'de uygulanabilir 6 adımlık teknik reçete çıkar: ${label}
 Sadece JSON döndür: { "title": "...", "steps": ["Adım 1...", "Adım 2..."] }`;
       const res = await fetch(apiUrl, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { responseMimeType: 'application/json' }
