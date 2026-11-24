@@ -5,7 +5,6 @@ import {
   Calendar,
   Globe,
   Plug,
-  Sparkles,
   Download,
   Plus,
   CheckCircle2,
@@ -95,9 +94,10 @@ export default function App() {
   const [revInput, setRevInput] = useState('');
   const [revStatus, setRevStatus] = useState('');
   const [lastPsdPath, setLastPsdPath] = useState('');
-  const [qaScore, setQaScore] = useState(96);
-  const [qaCritique, setQaCritique] = useState('Başlık ve CTA mobilde yüksek kontrastla okunuyor. Safe zone ihlali yok.');
-  const [trendMoodboard, setTrendMoodboard] = useState<{ pattern: string; detail: string }[]>([]);
+  const [qaScore, setQaScore] = useState<number | null>(null);
+  const [qaBars, setQaBars] = useState<Record<string, number> | null>(null);
+  const [qaChecks, setQaChecks] = useState<{ id: string; label: string; ok: boolean; detail?: string }[]>([]);
+  const [qaCritique, setQaCritique] = useState('Henüz denetim yapılmadı.');
   const [brandAssets, setBrandAssets] = useState<AssetFile[]>([]);
   const [selectedHeroPath, setSelectedHeroPath] = useState('');
   const [outputFiles, setOutputFiles] = useState<OutputFile[]>([]);
@@ -109,8 +109,7 @@ export default function App() {
   // New brand form
   const [newBrand, setNewBrand] = useState({ name: '', sector: '', tone: 'Modern, kurumsal', primary_color: '#0F172A', secondary_color: '#1E293B', accent_color: '#38BDF8', font_family: 'Inter', website: '' });
   // New recipe form
-  const [ytUrl, setYtUrl] = useState('');
-  // Brief & Strategy
+    // Brief & Strategy
   const [briefText, setBriefText] = useState('Danışman olmak ister misiniz temalı sosyal medya içeriği, 1 aylık içerik stratejisi, örnek Post ve Story tasarımları ile PDF teklif sunumunu hazırla.');
   const [strategyItems, setStrategyItems] = useState<StrategyItem[]>([]);
   const [strategySummary, setStrategySummary] = useState('');
@@ -219,50 +218,30 @@ export default function App() {
     }
   };
 
-  const handleAddRecipe = async () => {
-    if (!ytUrl.trim()) return;
-    const res = await fetch('/api/memory/youtube', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: ytUrl })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setRecipes(prev => [data.recipe, ...prev]);
-      setYtUrl('');
-      notify(`YouTube reçetesi çıkarıldı ve design-memory klasörüne kaydedildi (${data.steps.length} adım).`);
-    }
-  };
-
   const handleRunQa = async () => {
-    notify('Vision QA tasarımı denetliyor...');
+    notify('QA denetimi çalışıyor...');
     try {
+      const pngPath = lastPsdPath ? lastPsdPath.replace(/\.psd$/i, '.png') : '';
       const res = await fetch('/api/qa/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brand_id: activeBrand.id, psdPath: lastPsdPath, copy })
+        body: JSON.stringify({ brand_id: activeBrand.id, psdPath: lastPsdPath, pngPath, copy })
       });
       const data = await res.json();
       if (data.ok) {
-        setQaScore(data.total);
-        setQaCritique(data.critique);
-        notify(`Vision QA tamamlandı: ${data.total}/100 (${data.mode})`);
+        setQaScore(typeof data.total === 'number' ? data.total : null);
+        setQaBars(data.breakdown || null);
+        setQaChecks(data.checks || []);
+        setQaCritique(data.critique || '');
+        notify(typeof data.total === 'number' ? `QA: ${data.total}/100 (${data.mode})` : `QA ölçülemedi (${data.mode})`);
+      } else {
+        setQaScore(null);
+        setQaBars(null);
+        setQaCritique(data.error || 'QA başarısız.');
+        notify(`QA hatası: ${data.error}`);
       }
     } catch {
       notify('Backend bağlantı hatası.');
-    }
-  };
-
-  const handleResearchTrends = async () => {
-    const res = await fetch('/api/memory/trends', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sector: activeBrand.sector })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setTrendMoodboard(data.moodboard || []);
-      notify(`${activeBrand.sector} sektörü için güncel trend moodboard çıkarıldı.`);
     }
   };
 
@@ -276,9 +255,9 @@ export default function App() {
       });
       const data = await res.json();
       if (data.ok) {
-        setLastPsdPath(data.psdPath);
+        setLastPsdPath('');
         loadOutputs();
-        notify(`Pro JSX hazır: ${data.jsxPath} (Photoshop: Dosya → Komut Dosyaları → Gözat)`);
+        notify(`JSX hazır (PSD henüz üretilmedi): ${data.jsxPath} — Photoshop'ta Dosya → Komut Dosyaları → Gözat ile çalıştırın. PSD oluşunca QA/revizyon için çıktı listesinden seçin.`);
       } else {
         notify(`Hata: ${data.error}`);
       }
@@ -330,40 +309,9 @@ export default function App() {
     }
   };
 
-  const handleFireflyEnhance = async (action: 'recompose' | 'restyle' | 'relight') => {
-    notify(`Adobe 2027 Firefly (${action.toUpperCase()}) çalışıyor...`);
-    try {
-      const res = await fetch('/api/adobe/firefly/enhance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brand_id: activeBrand.id, heroImagePath: selectedHeroPath, action, format })
-      });
-      const data = await res.json();
-      if (data.ok) notify(data.message || 'Firefly 2027 işlemi tamamlandı!');
-      else notify(`Hata: ${data.error}`);
-    } catch {
-      notify('Backend bağlantı hatası.');
-    }
-  };
-
-  const handleFirefly = async () => {
-    notify('Adobe Firefly sahne promptu hazırlanıyor...');
-    try {
-      const res = await fetch('/api/adobe/firefly/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brand_id: activeBrand.id, format })
-      });
-      const data = await res.json();
-      if (data.ok) notify(data.mode === 'live_firefly' ? 'Adobe Firefly görseli üretildi!' : data.message);
-      else notify(`Firefly hatası: ${data.error}`);
-    } catch {
-      notify('Backend bağlantı hatası.');
-    }
-  };
-
   const handleRevision = async () => {
-    const val = revInput.trim() || 'Tipografi kontrastı ve hizalama optimize edildi';
+    const val = revInput.trim();
+    if (!val) { setRevStatus('Önce revize talimatı yazın.'); return; }
     setRevStatus('Photoshop MCP katmanları güncelliyor...');
     try {
       const res = await fetch('/api/adobe/photoshop/revise', {
@@ -373,8 +321,11 @@ export default function App() {
       });
       const data = await res.json();
       if (data.ok) {
-        setRevStatus(data.simulated ? data.message : `Photoshop MCP güncelledi (${data.updatedLayer}): "${val}" — Yeni QA: 98/100`);
-        setQaScore(98);
+        setRevStatus(data.simulated
+          ? data.message
+          : `Photoshop'ta uygulandı: ${data.updatedLayer} punto ${data.sizeBefore} → ${data.sizeAfter}. QA için yeniden denetleyin.`);
+        setQaScore(null);
+        setQaBars(null);
         setRevInput('');
       } else {
         setRevStatus(`Hata: ${data.error}`);
@@ -422,8 +373,7 @@ export default function App() {
     { name: 'Alt_Aciklama', type: 'T', opacity: '90%' },
     { name: 'CTA_Buton_Grubu', type: '▢', opacity: '100%' },
     { name: 'Logo_SmartObject', type: '◆', opacity: '100%' },
-    { name: 'Okunabilirlik_Gradient', type: '◐', opacity: '75%' },
-    { name: 'BG_Firefly_Sahne', type: '✦', opacity: '100%' }
+    { name: 'Okunabilirlik_Gradient', type: '◐', opacity: '75%' }
   ];
 
   return (
@@ -503,9 +453,9 @@ export default function App() {
         </div>
 
         <div className="p-3.5 border-t border-zinc-800 space-y-2 text-[11px]">
-          <div className="flex justify-between"><span className="text-zinc-400">Photoshop / AI MCP</span><span className="text-emerald-400 font-medium">Hazır</span></div>
-          <div className="flex justify-between"><span className="text-zinc-400">Adobe Firefly</span><span className="text-amber-400 font-medium">Entegre</span></div>
-          <div className="flex justify-between"><span className="text-zinc-400">Gemini + Claude</span><span className="text-zinc-200 font-mono">API</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Sürüm</span><span className="text-zinc-200 font-mono">v{appVersion}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Gemini</span><span className={settings.gemini_api_key ? 'text-emerald-400 font-medium' : 'text-zinc-500'}>{settings.gemini_api_key ? 'Anahtar var' : 'Anahtar yok'}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Claude</span><span className={settings.claude_api_key ? 'text-emerald-400 font-medium' : 'text-zinc-500'}>{settings.claude_api_key ? 'Anahtar var' : 'Anahtar yok'}</span></div>
           <div className="pt-2 border-t border-zinc-800 space-y-2">
             <button onClick={handleCheckUpdate} className="w-full py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 text-[11px] font-medium text-zinc-200 cursor-pointer">
               Güncellemeleri Denetle
@@ -526,10 +476,10 @@ export default function App() {
               {view === 'calendar' && '30 Günlük İçerik Stratejisi & Takvim'}
               {view === 'brands' && 'Müşteri & Marka Merkezi'}
               {view === 'memory' && 'Araştırma & Öğrenme Kütüphanesi'}
-              {view === 'integrations' && 'Adobe MCP, Firefly & API Bağlantıları'}
+              {view === 'integrations' && 'API Bağlantıları'}
             </h1>
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-mono text-emerald-400">
-              <CheckCircle2 className="w-3 h-3" /> QA {qaScore}/100
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-zinc-800/60 border border-zinc-700 text-[11px] font-mono text-zinc-300">
+              <CheckCircle2 className="w-3 h-3" /> {qaScore === null ? 'QA: ölçülmedi' : `QA ${qaScore}/100`}
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -566,20 +516,6 @@ export default function App() {
                     <span className="text-[10px] text-zinc-500">{l.opacity}</span>
                   </div>
                 ))}
-              </div>
-              <div className="p-3 border-t border-zinc-800 space-y-2">
-                <div className="text-[11px] font-semibold flex items-center justify-between">
-                  <span className="flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 text-amber-400" /> Adobe Firefly</span>
-                  <span className="text-[10px] font-mono text-amber-400">GenFill</span>
-                </div>
-                <button onClick={handleFirefly} className="w-full py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 text-xs font-medium cursor-pointer">
-                  Arka Planı Yeniden Üret
-                </button>
-                <div className="grid grid-cols-3 gap-1 pt-1">
-                  <button onClick={() => handleFireflyEnhance('recompose')} className="py-1 rounded bg-zinc-950 border border-zinc-800 hover:border-amber-500/50 text-[10px] cursor-pointer" title="Adobe 2027 Generative Recompose">Recompose</button>
-                  <button onClick={() => handleFireflyEnhance('restyle')} className="py-1 rounded bg-zinc-950 border border-zinc-800 hover:border-amber-500/50 text-[10px] cursor-pointer" title="Adobe 2027 Generative Restyle">Restyle</button>
-                  <button onClick={() => handleFireflyEnhance('relight')} className="py-1 rounded bg-zinc-950 border border-zinc-800 hover:border-amber-500/50 text-[10px] cursor-pointer" title="Photoshop 2027 Relight">Relight</button>
-                </div>
               </div>
             </div>
 
@@ -669,26 +605,36 @@ export default function App() {
             <div className="w-full lg:w-72 shrink-0 border-l border-zinc-800 bg-zinc-900/40 p-4 space-y-5 overflow-y-auto">
               <div className="flex items-center justify-between">
                 <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Vision QA Denetimi</h2>
-                <span className="text-sm font-bold font-mono text-emerald-400">{qaScore} / 100</span>
+                <span className="text-sm font-bold font-mono text-zinc-200">{qaScore === null ? '—' : `${qaScore} / 100`}</span>
               </div>
               <div className="space-y-3 text-xs">
-                {[
-                  ['Tipografi & Hiyerarşi', 97],
-                  ['Kontrast & Okunabilirlik', 95],
-                  ['Grid & Boşluk Dengesi', 96],
-                  ['Marka Kimliği Uyumu', 96]
-                ].map(([label, val]) => (
-                  <div key={String(label)} className="space-y-1">
-                    <div className="flex justify-between"><span>{label}</span><span className="font-mono">{val}%</span></div>
-                    <div className="h-1.5 rounded-full bg-zinc-950 overflow-hidden"><div className="h-full bg-emerald-400" style={{ width: `${val}%` }} /></div>
+                {qaBars ? (
+                  [
+                    ['Tipografi & Hiyerarşi', qaBars.typography],
+                    ['Kontrast & Okunabilirlik', qaBars.contrast],
+                    ['Grid & Boşluk Dengesi', qaBars.grid],
+                    ['Marka Kimliği Uyumu', qaBars.brandFit]
+                  ].map(([label, val]) => (
+                    <div key={String(label)} className="space-y-1">
+                      <div className="flex justify-between"><span>{label}</span><span className="font-mono">{val}%</span></div>
+                      <div className="h-1.5 rounded-full bg-zinc-950 overflow-hidden"><div className="h-full bg-emerald-400" style={{ width: `${val}%` }} /></div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-zinc-500">Görsel puan yok. PSD ve PNG üretildikten sonra Gemini anahtarıyla denetleyin.</div>
+                )}
+                {qaChecks.map(c => (
+                  <div key={c.id} className="flex justify-between text-[11px]">
+                    <span className={c.ok ? 'text-zinc-400' : 'text-amber-400'}>{c.ok ? '✓' : '✗'} {c.label}</span>
+                    <span className="font-mono text-zinc-500">{c.detail || ''}</span>
                   </div>
                 ))}
               </div>
               <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 text-xs space-y-2">
-                <div className="font-semibold">Kreatif Direktör Notu</div>
+                <div className="font-semibold">Denetim Notu</div>
                 <p className="text-[11px] text-zinc-400 leading-relaxed">{qaCritique}</p>
                 <button onClick={handleRunQa} className="w-full py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 text-xs font-medium cursor-pointer">
-                  Vision QA Denetle (%90+ Kontrol)
+                  QA Denetle
                 </button>
               </div>
             </div>
@@ -888,43 +834,17 @@ export default function App() {
 
         {/* MEMORY VIEW */}
         {view === 'memory' && (
-          <div className="flex-1 p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-3 text-xs">
-              <h2 className="text-sm font-bold">YouTube Eğitiminden MCP Reçetesi Çıkar</h2>
-              <div className="flex gap-2">
-                <input value={ytUrl} onChange={e => setYtUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." className="flex-1 px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800" />
-                <button onClick={handleAddRecipe} className="px-4 py-2 rounded-lg bg-indigo-500 text-white font-semibold cursor-pointer">Ekle</button>
-              </div>
+          <div className="flex-1 p-6 overflow-y-auto space-y-5">
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-2 text-xs">
+              <h2 className="text-sm font-bold">Öğrenme Kütüphanesi</h2>
+              <p className="text-zinc-400">Video ve görsel öğrenme henüz etkin değil; bu bölüm gerçek öğrenici bağlanınca çalışacak. Aşağıdaki liste yalnızca başlangıçta elle eklenmiş eğitim kaynaklarının başlıklarıdır; üretimde kullanılmaz.</p>
               <div className="space-y-2 pt-2">
                 {recipes.map(r => (
                   <div key={r.id} className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 flex justify-between">
                     <span>{r.title}</span>
-                    <span className="font-mono text-emerald-400">{r.steps_count} Adım</span>
+                    <span className="font-mono text-zinc-500">{r.steps_count} Adım</span>
                   </div>
                 ))}
-              </div>
-            </div>
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-3 text-xs">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold">Canlı Trend & Rakip Araştırması</h2>
-                <button onClick={handleResearchTrends} className="px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-semibold cursor-pointer">
-                  {activeBrand.sector} Tara
-                </button>
-              </div>
-              <p className="text-zinc-400">Meta Ad Library, Behance ve Pinterest kaynaklarından sektörel moodboard çıkarır.</p>
-              <div className="space-y-2 pt-1">
-                {trendMoodboard.length === 0 ? (
-                  <div className="p-4 text-center text-zinc-500 border border-dashed border-zinc-800 rounded-lg">
-                    "{activeBrand.sector} Tara" butonuna basarak güncel trend özetini çıkarın.
-                  </div>
-                ) : (
-                  trendMoodboard.map((m, i) => (
-                    <div key={i} className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-1">
-                      <div className="font-semibold text-indigo-400">{m.pattern}</div>
-                      <div className="text-zinc-400">{m.detail}</div>
-                    </div>
-                  ))
-                )}
               </div>
             </div>
           </div>
@@ -934,7 +854,7 @@ export default function App() {
         {view === 'integrations' && (
           <div className="flex-1 p-6 overflow-y-auto">
             <div className="max-w-xl bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-4 text-xs">
-              <h2 className="text-sm font-bold">Gemini, Claude & Adobe Firefly API Ayarları</h2>
+              <h2 className="text-sm font-bold">Gemini & Claude API Ayarları</h2>
               <label className="block space-y-1">
                 <span className="text-zinc-400">Google Gemini API Key</span>
                 <input type="password" value={settings.gemini_api_key || ''} onChange={e => setSettings({ ...settings, gemini_api_key: e.target.value })} placeholder="AIzaSy..." className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono" />
@@ -942,10 +862,6 @@ export default function App() {
               <label className="block space-y-1">
                 <span className="text-zinc-400">Anthropic Claude API Key</span>
                 <input type="password" value={settings.claude_api_key || ''} onChange={e => setSettings({ ...settings, claude_api_key: e.target.value })} placeholder="sk-ant-..." className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono" />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-zinc-400">Adobe Firefly API Key</span>
-                <input type="password" value={settings.firefly_api_key || ''} onChange={e => setSettings({ ...settings, firefly_api_key: e.target.value })} placeholder="Adobe Firefly Client / API Key" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono" />
               </label>
               <button onClick={handleSaveSettings} className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-semibold cursor-pointer">
                 Ayarları Kaydet

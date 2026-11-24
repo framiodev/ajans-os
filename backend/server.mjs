@@ -8,10 +8,8 @@ import { generateStrategyAndCalendar } from './services/aiProvider.mjs';
 import { buildCalendarCsv, buildProposalHtml } from './services/exporter.mjs';
 import { generatePostPsd, generateProEditorialJsx, revisePhotoshopLayer } from '../mcp-servers/adobe-mcp/photoshopBridge.mjs';
 import { generateVectorPostAi } from '../mcp-servers/adobe-mcp/illustratorBridge.mjs';
-import { generateFireflyScene, enhanceOrRecreateWithFirefly } from '../mcp-servers/adobe-mcp/fireflyService.mjs';
 import { localOnly, validatedPath, isSecretKey, maskSecret } from './security.mjs';
 import { evaluateDesign } from './services/visionQa.mjs';
-import { extractYoutubeRecipe, researchTrends } from './services/designLearner.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.AJANSOS_DATA_DIR || path.resolve(__dirname, '../storage');
@@ -35,21 +33,12 @@ function allowedImageRoots() {
 
 // Health & Status
 app.get('/api/health', (_req, res) => {
-  let version = '1.2.3';
+  let version = 'bilinmiyor';
   try {
     version = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8')).version || version;
   } catch {}
-  res.json({
-    ok: true,
-    app: 'FramioMedia AjansOS Backend',
-    version,
-    services: {
-      database: 'connected',
-      photoshopMcp: 'ready',
-      illustratorMcp: 'ready',
-      firefly: 'configured'
-    }
-  });
+  const row = db.prepare('SELECT COUNT(*) AS n FROM brands').get();
+  res.json({ ok: true, app: 'FramioMedia AjansOS Backend', version, database: { ok: true, brands: row.n } });
 });
 
 // Brands CRUD
@@ -209,7 +198,7 @@ app.post('/api/campaigns', (req, res) => {
   const id = 'cmp-' + crypto.randomBytes(3).toString('hex');
   db.prepare(`
     INSERT INTO campaigns (id, brand_id, title, brief, status, qa_score)
-    VALUES (?, ?, ?, ?, 'completed', 96)
+    VALUES (?, ?, ?, ?, 'draft', NULL)
   `).run(id, brand_id || 'vega', title || 'Yeni Kampanya', brief || '');
   const created = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id);
   res.status(201).json(created);
@@ -312,24 +301,6 @@ app.post('/api/adobe/illustrator/create', async (req, res) => {
   }
 });
 
-app.post('/api/adobe/firefly/enhance', async (req, res) => {
-  try {
-    const { brand_id, heroImagePath, action, format } = req.body || {};
-    const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
-    if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
-    const result = await enhanceOrRecreateWithFirefly({ brand, heroImagePath, action: action || 'recompose', format: format || 'post' });
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-app.get('/api/knowledge/adobe-2027', (_req, res) => {
-  const kPath = path.resolve(__dirname, '../design-memory/adobe_2027_knowledge.json');
-  if (!fs.existsSync(kPath)) return res.json({ photoshop_2027: [], firefly_2027: [], creative_cloud_mcp_2027: [] });
-  res.json(JSON.parse(fs.readFileSync(kPath, 'utf8')));
-});
-
 app.get('/api/system/check-update', async (_req, res) => {
   try {
     if (typeof global.triggerAjansUpdateCheck === 'function') {
@@ -338,21 +309,9 @@ app.get('/api/system/check-update', async (_req, res) => {
     }
     const pkgPath = path.resolve(__dirname, '../package.json');
     const currentVersion = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || '1.2.5';
-    res.json({ ok: true, currentVersion, message: `Uygulama güncel (v${currentVersion})` });
+    res.json({ ok: true, currentVersion, message: `Sürüm v${currentVersion}. Güncelleme denetimi yalnızca kurulu uygulamada çalışır (geliştirme modunda kontrol edilmez).` });
   } catch (err) {
     res.json({ ok: false, message: 'Güncelleme kontrolü yapılamadı: ' + err.message });
-  }
-});
-
-app.post('/api/adobe/firefly/generate', async (req, res) => {
-  try {
-    const { brand_id, prompt, format } = req.body || {};
-    const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
-    if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
-    const result = await generateFireflyScene({ brand, prompt, format: format || 'post' });
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -372,32 +331,6 @@ app.post('/api/qa/evaluate', async (req, res) => {
       autoFixed = true;
     }
     res.json({ ok: true, autoFixed, ...qa });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-app.post('/api/memory/youtube', async (req, res) => {
-  try {
-    const { url, topic } = req.body || {};
-    const extracted = await extractYoutubeRecipe({ url, topic });
-    const id = 'rec-' + crypto.randomBytes(3).toString('hex');
-    db.prepare(`
-      INSERT INTO recipes (id, title, source_url, source_type, steps_count, steps_json)
-      VALUES (?, ?, ?, 'youtube', ?, ?)
-    `).run(id, extracted.title, url || '', extracted.steps.length, JSON.stringify(extracted.steps));
-    const created = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id);
-    res.status(201).json({ ok: true, mode: extracted.mode, recipe: created, steps: extracted.steps });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-app.post('/api/memory/trends', async (req, res) => {
-  try {
-    const { sector, sources } = req.body || {};
-    const result = await researchTrends({ sector: sector || 'Genel', sources });
-    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }

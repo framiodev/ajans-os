@@ -14,7 +14,7 @@ function findPhotoshopExe() {
       if (fsSync.existsSync(exe)) return exe;
     }
   }
-  return 'C:\\Program Files\\Adobe\\Adobe Photoshop 2027\\Photoshop.exe';
+  return null;
 }
 
 function hexToRgb(hex = '#0B1120') {
@@ -30,15 +30,17 @@ function escapeJsx(str = '') {
 
 async function runPhotoshopJsx(jsxCode) {
   const exe = findPhotoshopExe();
+  if (!exe) throw new Error('Photoshop bulunamadi (C:\\Program Files\\Adobe altinda kurulu surum yok).');
   const id = Date.now();
   const tmpJsx = path.join(os.tmpdir(), `ajansos_ps_${id}.jsx`);
   const doneFile = path.join(os.tmpdir(), `ajansos_ps_${id}.done`).replace(/\\/g, '/');
 
   const wrappedJsx = `
     try {
+      var __result;
       ${jsxCode}
       var df = new File("${escapeJsx(doneFile)}");
-      df.open("w"); df.write("OK"); df.close();
+      df.open("w"); df.write(typeof __result === "string" ? "OK:" + __result : "OK"); df.close();
     } catch (e) {
       var ef = new File("${escapeJsx(doneFile)}");
       ef.open("w"); ef.write("ERR:" + e.message); ef.close();
@@ -235,7 +237,14 @@ export async function generatePostPsd({ brand, copy, format = 'post', outputDir 
 
 export async function revisePhotoshopLayer({ psdPath, instruction }) {
   const lower = (instruction || '').toLowerCase();
-  const targetLayer = lower.includes('logo') ? 'Logo_SmartObject' : lower.includes('cta') || lower.includes('buton') ? 'CTA_Buton_Grubu' : 'Ana_Baslik_H1';
+  // PSD'yi hangi akış üretmiş olursa olsun (generatePostPsd / pro-jsx) katman adı eşleşsin diye aday listesi
+  const CANDIDATES = {
+    logo: ['Logo_SmartObject', 'Brand_Logo'],
+    cta: ['CTA_Buton_Grubu', 'CTA_Button_Text'],
+    headline: ['Ana_Baslik_H1', 'Headline_H1']
+  };
+  const kind = lower.includes('logo') ? 'logo' : lower.includes('cta') || lower.includes('buton') ? 'cta' : 'headline';
+  const targetLayer = CANDIDATES[kind][0];
   const delta = lower.includes('küçült') || lower.includes('kucult') ? -10 : 12;
 
   const cleanPsd = psdPath.replace(/\\/g, '/');
@@ -243,21 +252,29 @@ export async function revisePhotoshopLayer({ psdPath, instruction }) {
 
   const jsx = `
     var f = new File("${escapeJsx(cleanPsd)}");
-    if (f.exists) {
-      var doc = app.open(f);
-      try {
-        var lyr = doc.artLayers.getByName("${targetLayer}");
-        if (lyr.kind == LayerKind.TEXT) {
-          lyr.textItem.size = Number(lyr.textItem.size) + (${delta});
-        }
-      } catch(e) {}
-      var psdOpts = new PhotoshopSaveOptions();
-      psdOpts.layers = true;
-      doc.saveAs(f, psdOpts, true, Extension.LOWERCASE);
-      doc.saveAs(new File("${escapeJsx(cleanPng)}"), new PNGSaveOptions(), true, Extension.LOWERCASE);
+    if (!f.exists) throw new Error("PSD dosyasi yok: ${escapeJsx(cleanPsd)}");
+    var doc = app.open(f);
+    var names = ${JSON.stringify(CANDIDATES[kind])};
+    var lyr = null;
+    for (var i = 0; i < names.length && !lyr; i++) {
+      try { lyr = doc.artLayers.getByName(names[i]); } catch (e1) {}
     }
+    if (!lyr) { doc.close(SaveOptions.DONOTSAVECHANGES); throw new Error("Katman bulunamadi: " + names.join(" / ")); }
+    if (lyr.kind != LayerKind.TEXT) { doc.close(SaveOptions.DONOTSAVECHANGES); throw new Error("Katman metin degil: " + lyr.name); }
+    var before = Number(lyr.textItem.size);
+    lyr.textItem.size = before + (${delta});
+    var after = Number(lyr.textItem.size);
+    if (after === before) { doc.close(SaveOptions.DONOTSAVECHANGES); throw new Error("Boyut degismedi: " + lyr.name); }
+    var psdOpts = new PhotoshopSaveOptions();
+    psdOpts.layers = true;
+    doc.saveAs(f, psdOpts, true, Extension.LOWERCASE);
+    doc.saveAs(new File("${escapeJsx(cleanPng)}"), new PNGSaveOptions(), true, Extension.LOWERCASE);
+    doc.close(SaveOptions.DONOTSAVECHANGES);
+    __result = lyr.name + "|" + before + "|" + after;
   `;
 
-  await runPhotoshopJsx(jsx);
-  return { updatedLayer: targetLayer, psdPath: cleanPsd, pngPath: cleanPng };
+  const status = await runPhotoshopJsx(jsx);
+  const m = /^OK:(.+)\|(\d+(?:\.\d+)?)\|(\d+(?:\.\d+)?)$/.exec(status);
+  if (!m) throw new Error('Revizyon dogrulanamadi: ' + status);
+  return { updatedLayer: m[1], sizeBefore: Number(m[2]), sizeAfter: Number(m[3]), psdPath: cleanPsd, pngPath: cleanPng };
 }

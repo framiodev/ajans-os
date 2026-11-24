@@ -1,21 +1,4 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { db } from '../db.mjs';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ADOBE_2027_PATH = path.resolve(__dirname, '../../design-memory/adobe_2027_knowledge.json');
-
-function getAdobe2027Summary() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(ADOBE_2027_PATH, 'utf8'));
-    const ps = (raw.photoshop_2027 || []).map(x => x.name).join(', ');
-    const ff = (raw.firefly_2027 || []).map(x => x.name).join(', ');
-    return `Adobe 2027 Yetkinlikleri: Photoshop (${ps}); Firefly (${ff}); Yerel MCP & Brand Intelligence.`;
-  } catch {
-    return '';
-  }
-}
 
 function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
@@ -57,7 +40,6 @@ Sektör: ${brand.sector}
 Ton: ${brand.tone}
 Marka Kuralları (.md Rehber):
 ${brand.brand_guidelines_md || 'Belirtilmedi — sektör standartlarını uygula.'}
-${getAdobe2027Summary()}
 
 Brief: ${brief || '1 aylık sosyal medya içerik stratejisi ve örnek gönderiler.'}
 
