@@ -234,7 +234,7 @@ app.post('/api/strategy/generate', async (req, res) => {
   }
 
   const saved = db.prepare('SELECT * FROM strategy_items WHERE brand_id = ? ORDER BY day ASC').all(brand.id);
-  res.json({ mode: result.mode, summary: result.summary, items: saved });
+  res.json({ mode: result.mode, summary: result.summary, items: saved, failures: result.failures || [] });
 });
 
 app.get('/api/strategy/:brandId', (req, res) => {

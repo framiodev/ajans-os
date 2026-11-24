@@ -41,6 +41,17 @@ db.exec(`
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS cost_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT DEFAULT CURRENT_TIMESTAMP,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    purpose TEXT DEFAULT '',
+    brand_id TEXT DEFAULT ''
+  );
+
   CREATE TABLE IF NOT EXISTS recipes (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,

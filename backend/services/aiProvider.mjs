@@ -1,11 +1,83 @@
 import { db } from '../db.mjs';
 
+const FORMATS = ['Post 4:5', 'Story 9:16', 'Carousel', 'Reels Fikri'];
+const MODEL_RE = /^[A-Za-z0-9._:-]{3,80}$/;
+
+function getModel(key, fallback) {
+  const v = getSetting(key);
+  return MODEL_RE.test(v) ? v : fallback;
+}
+
+// Metinden ilk dengeli JSON nesnesini çıkarır (açgözlü regex yerine).
+export function extractJson(text) {
+  const t = String(text || '');
+  try { return JSON.parse(t); } catch {}
+  const start = t.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < t.length; i++) {
+    const c = t[i];
+    if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) {
+      try { return JSON.parse(t.slice(start, i + 1)); } catch { return null; }
+    }
+  }
+  return null;
+}
+
+const str = (v, n) => String(v ?? '').slice(0, n);
+
+// Model çıktısı şema doğrulamasından geçmeden veritabanına girmez.
+export function validateStrategy(obj) {
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.items)) return null;
+  const items = [];
+  for (const it of obj.items.slice(0, 40)) {
+    if (!it || typeof it !== 'object') continue;
+    const title = str(it.title, 120).trim();
+    const day = Math.round(Number(it.day));
+    if (!title || !Number.isFinite(day) || day < 1 || day > 31) continue;
+    items.push({
+      day,
+      format: FORMATS.includes(it.format) ? it.format : 'Post 4:5',
+      topic: str(it.topic, 160), eyebrow: str(it.eyebrow, 60), title,
+      desc: str(it.desc, 300), cta: str(it.cta, 60), goal: str(it.goal, 80)
+    });
+  }
+  if (!items.length) return null;
+  return { summary: str(obj.summary, 600), items };
+}
+
+async function postJson(url, headers, body, { retries = 1, timeoutMs = 90000 } = {}) {
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
+      if (res.ok) return await res.json();
+      lastErr = new Error(`HTTP ${res.status}`);
+      if (res.status !== 429 && res.status < 500) break;
+    } catch (e) {
+      lastErr = e;
+    }
+    await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+  }
+  throw lastErr;
+}
+
+function logCost({ provider, model, input, output, purpose, brandId }) {
+  try {
+    db.prepare('INSERT INTO cost_ledger (provider, model, input_tokens, output_tokens, purpose, brand_id) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(provider, model, Number(input) || 0, Number(output) || 0, purpose, brandId || '');
+  } catch {}
+}
+
 function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? row.value.trim() : '';
 }
 
-function buildOfflineStrategy(brand, brief) {
+function buildOfflineStrategy(brand, brief, reason = '') {
   const sector = brand.sector || 'Genel';
   const name = brand.name || 'Marka';
   const tone = brand.tone || 'Profesyonel';
@@ -25,7 +97,7 @@ function buildOfflineStrategy(brand, brief) {
 
   return {
     mode: 'offline',
-    summary: `${name} (${sector}) için ${tone.toLowerCase()} tonda, bilinirlik + güven + dönüşüm odaklı 30 günlük ajans içerik stratejisi oluşturuldu. (API anahtarları eklendiğinde Claude & Gemini canlı üretim yapacaktır.)`,
+    summary: `${name} (${sector}) için ${tone.toLowerCase()} tonda, bilinirlik + güven + dönüşüm odaklı 30 günlük ajans içerik stratejisi oluşturuldu. ${reason ? `(Çevrimdışı şablon: ${reason})` : '(Çevrimdışı şablon: API anahtarı girilmedi.)'}`,
     items
   };
 }
@@ -47,61 +119,44 @@ Sadece geçerli JSON döndür:
 {
   "summary": "2 cümlelik strateji özeti",
   "items": [
-    { "day": 1, "format": "Post 4:5", "topic": "...", "eyebrow": "...", "title": "...", "desc": "...", "cta": "...", "goal": "..." }
+    { "day": 1, "format": "Post 4:5 | Story 9:16 | Carousel | Reels Fikri", "topic": "...", "eyebrow": "...", "title": "...", "desc": "...", "cta": "...", "goal": "..." }
   ]
 }
-Toplam 8-10 adet (1 aya yayılmış) yüksek kaliteli Türkçe içerik üret.`;
+Ayın 1-30. günlerine yayılmış 10 adet yüksek kaliteli Türkçe içerik üret. Başlık en fazla 60, açıklama en fazla 140, CTA en fazla 28 karakter olsun. Kaynağını bilmediğin istatistik veya rakam yazma.`;
+
+  const failures = [];
 
   if (claudeKey) {
+    const model = getModel('claude_model', 'claude-sonnet-5-5');
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': claudeKey,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: 'claude-3-7-sonnet-latest',
-          max_tokens: 2048,
-          messages: [{ role: 'user', content: prompt }]
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const text = data.content?.[0]?.text || '';
-        const match = text.match(/\{[\s\S]*\}/);
-        if (match) {
-          const parsed = JSON.parse(match[0]);
-          return { mode: 'claude', summary: parsed.summary || '', items: parsed.items || [] };
-        }
-      }
+      const data = await postJson('https://api.anthropic.com/v1/messages', { 'x-api-key': claudeKey, 'anthropic-version': '2023-06-01' },
+        { model, max_tokens: 8000, messages: [{ role: 'user', content: prompt }] });
+      logCost({ provider: 'anthropic', model, input: data.usage?.input_tokens, output: data.usage?.output_tokens, purpose: 'strategy', brandId: brand.id });
+      if (data.stop_reason === 'max_tokens') throw new Error('yanıt kesildi (max_tokens)');
+      const parsed = validateStrategy(extractJson(data.content?.[0]?.text));
+      if (!parsed) throw new Error('yanıt şemaya uymuyor');
+      return { mode: 'claude', ...parsed };
     } catch (err) {
-      console.error('Claude API hatasi, offline moda geciliyor:', err.message);
+      failures.push(`Claude: ${err.message}`);
+      console.error('Claude API hatasi:', err.message);
     }
   }
 
   if (geminiKey) {
+    const model = getModel('gemini_model', 'gemini-2.5-flash');
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-goog-api-key': geminiKey },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json' }
-        })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const parsed = JSON.parse(text);
-        return { mode: 'gemini', summary: parsed.summary || '', items: parsed.items || [] };
-      }
+      const data = await postJson(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, { 'x-goog-api-key': geminiKey },
+        { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8000 } });
+      logCost({ provider: 'google', model, input: data.usageMetadata?.promptTokenCount, output: data.usageMetadata?.candidatesTokenCount, purpose: 'strategy', brandId: brand.id });
+      if (data.candidates?.[0]?.finishReason === 'MAX_TOKENS') throw new Error('yanıt kesildi (MAX_TOKENS)');
+      const parsed = validateStrategy(extractJson(data.candidates?.[0]?.content?.parts?.[0]?.text));
+      if (!parsed) throw new Error('yanıt şemaya uymuyor');
+      return { mode: 'gemini', ...parsed };
     } catch (err) {
-      console.error('Gemini API hatasi, offline moda geciliyor:', err.message);
+      failures.push(`Gemini: ${err.message}`);
+      console.error('Gemini API hatasi:', err.message);
     }
   }
 
-  return buildOfflineStrategy(brand, brief);
+  return { ...buildOfflineStrategy(brand, brief, failures.join('; ')), failures };
 }
