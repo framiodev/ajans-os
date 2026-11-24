@@ -460,7 +460,6 @@ export default function App() {
             <button onClick={handleCheckUpdate} className="w-full py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 text-[11px] font-medium text-zinc-200 cursor-pointer">
               Güncellemeleri Denetle
             </button>
-            <div className="font-mono text-[10px] text-zinc-500 truncate">D:\Programlar\FramioMedia\AjansOS</div>
           </div>
         </div>
       </aside>
@@ -781,8 +780,8 @@ export default function App() {
               <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-3 text-xs">
                 <h3 className="text-sm font-bold">{activeBrand.name} — Marka Rehberi (.md Kurallar) & Görsel Klasörü</h3>
                 <label className="block space-y-1">
-                  <span className="text-zinc-400">Yerel Görsel Klasörü (örn. D:\Programlar\FramioMedia\AjansOS\storage\outputs)</span>
-                  <input value={editAssetsDir} onChange={e => setEditAssetsDir(e.target.value)} placeholder="D:\Musteriler\Marka\Fotograflar" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono" />
+                  <span className="text-zinc-400">Yerel Görsel Klasörü (müşteri fotoğraflarının olduğu klasör)</span>
+                  <input value={editAssetsDir} onChange={e => setEditAssetsDir(e.target.value)} placeholder="C:\Musteriler\Marka\Fotograflar" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 font-mono" />
                 </label>
                 <label className="block space-y-1">
                   <span className="text-zinc-400">Marka Kuralları (.md formatı — Hedef kitle, içerik beklentisi, yasaklı kelimeler)</span>

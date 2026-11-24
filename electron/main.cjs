@@ -5,6 +5,19 @@ const { pathToFileURL } = require('node:url');
 
 let mainWindow = null;
 const PORT = 4190;
+const APP_ORIGIN = `http://127.0.0.1:${PORT}`;
+
+// Tek örnek: ikinci kopya aynı veritabanını ve portu bozmasın.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
 
 async function waitForServer(url, retries = 30) {
   for (let i = 0; i < retries; i++) {
@@ -25,8 +38,19 @@ async function startBackend() {
 }
 
 async function createWindow() {
-  await startBackend();
-  await waitForServer(`http://127.0.0.1:${PORT}/api/health`);
+  try {
+    await startBackend();
+  } catch (e) {
+    dialog.showErrorBox('AjansOS başlatılamadı', `Sunucu açılamadı (port ${PORT} dolu olabilir): ${e.message}`);
+    app.quit();
+    return;
+  }
+  const ready = await waitForServer(`${APP_ORIGIN}/api/health`);
+  if (!ready) {
+    dialog.showErrorBox('AjansOS başlatılamadı', 'Yerel sunucu yanıt vermedi. Uygulamayı kapatıp yeniden açın.');
+    app.quit();
+    return;
+  }
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -38,16 +62,22 @@ async function createWindow() {
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      sandbox: true
     }
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  await mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
+  // Uygulama penceresi başka bir adrese gitmesin.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(APP_ORIGIN)) event.preventDefault();
+  });
+
+  await mainWindow.loadURL(APP_ORIGIN);
 
   // GitHub Releases Otomatik Güncelleme Kontrolü
   global.triggerAjansUpdateCheck = async () => {
@@ -83,7 +113,7 @@ async function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow);
+if (app.requestSingleInstanceLock()) app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

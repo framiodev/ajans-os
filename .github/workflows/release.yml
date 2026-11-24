@@ -9,7 +9,27 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix backend
+          npm ci --prefix frontend
+      - name: Backend tests
+        run: npm test
+      - name: Frontend typecheck
+        run: npm run typecheck --prefix frontend
+      - name: Frontend build
+        run: npm run build --prefix frontend
+
   release-windows:
+    needs: test
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -21,15 +41,15 @@ jobs:
           node-version: 22
 
       - name: Install root dependencies
-        run: npm install
+        run: npm ci
 
       - name: Install backend dependencies
         working-directory: backend
-        run: npm install
+        run: npm ci
 
       - name: Install frontend dependencies
         working-directory: frontend
-        run: npm install
+        run: npm ci
 
       - name: Build Windows Installer (.exe + latest.yml)
         env:
