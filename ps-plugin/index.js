@@ -3,7 +3,7 @@ const photoshop = require('photoshop');
 const uxp = require('uxp');
 const { app, core, action, constants } = photoshop;
 const fsx = uxp.storage.localFileSystem;
-const PLUGIN_VERSION = '0.2.0';
+const PLUGIN_VERSION = '0.2.1';
 // Photoshop 28'de app.version boş gelebiliyor; sırayla farklı kaynaklardan oku.
 function psVersion() {
   try {
@@ -166,7 +166,7 @@ async function makeShape(kind, a, warnings) {
   await modal('AjansOS: şekil', async () => {
     const shape = kind === 'ellipse'
       ? { _obj: 'ellipse', top: px(a.y), left: px(a.x), bottom: px(a.y + a.h), right: px(a.x + a.w) }
-      : { _obj: 'rect', unitValueQuadVersion: 1, top: px(a.y), left: px(a.x), bottom: px(a.y + a.h), right: px(a.x + a.w),
+      : { _obj: 'rectangle', unitValueQuadVersion: 1, top: px(a.y), left: px(a.x), bottom: px(a.y + a.h), right: px(a.x + a.w),
           topRight: px(a.radius || 0), topLeft: px(a.radius || 0), bottomLeft: px(a.radius || 0), bottomRight: px(a.radius || 0) };
     await action.batchPlay([{
       _obj: 'make', _target: [{ _ref: 'contentLayer' }],
