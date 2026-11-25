@@ -3,7 +3,7 @@ const photoshop = require('photoshop');
 const uxp = require('uxp');
 const { app, core, action, constants } = photoshop;
 const fsx = uxp.storage.localFileSystem;
-const PLUGIN_VERSION = '0.1.3';
+const PLUGIN_VERSION = '0.1.4';
 // Photoshop 28'de app.version boş gelebiliyor; sırayla farklı kaynaklardan oku.
 function psVersion() {
   try {
@@ -35,7 +35,23 @@ function solidColor(hex) {
 function rgb(hex) { const n = parseInt(hex.slice(1), 16); return { red: (n >> 16) & 255, green: (n >> 8) & 255, blue: n & 255 }; }
 function modal(name, fn) { return core.executeAsModal(fn, { commandName: name }); }
 function activeDoc() { const d = app.activeDocument; if (!d) throw new Error('Açık belge yok'); return d; }
-function toUrl(p) { return 'file:/' + encodeURI(String(p).replace(/\\/g, '/').replace(/^\/+/, '')); }
+// UXP, verilen yolu kendisi yüzde-kodlar; önceden kodlarsak "Ali%20Kaan" -> "Ali%2520Kaan" olur.
+// Bu yüzden önce ham yolu dene, olmazsa kodlu biçime düş.
+function toUrls(p) {
+  const path = String(p).replace(/\\/g, '/').replace(/^\/+/, '');
+  const raw = 'file:/' + path;
+  const enc = 'file:/' + encodeURI(path);
+  return raw === enc ? [raw] : [raw, enc];
+}
+async function entryAt(p, create) {
+  let lastErr;
+  for (const url of toUrls(p)) {
+    try {
+      return create ? await fsx.createEntryWithUrl(url, { overwrite: true }) : await fsx.getEntryWithUrl(url);
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
 
 function kindOf(layer) {
   const k = String(layer.kind || '').toLowerCase();
@@ -116,7 +132,7 @@ const handlers = {
   },
 
   async 'doc.open'(a) {
-    const entry = await fsx.getEntryWithUrl(toUrl(a.path));
+    const entry = await entryAt(a.path, false);
     await modal('AjansOS: aç', async () => { await app.open(entry); });
     return { name: activeDoc().name };
   },
@@ -187,9 +203,9 @@ const handlers = {
 
   async 'doc.save'(a) {
     const d = activeDoc();
-    const psd = await fsx.createEntryWithUrl(toUrl(a.psdPath), { overwrite: true });
+    const psd = await entryAt(a.psdPath, true);
     let png = null;
-    if (a.pngPath) png = await fsx.createEntryWithUrl(toUrl(a.pngPath), { overwrite: true });
+    if (a.pngPath) png = await entryAt(a.pngPath, true);
     await modal('AjansOS: kaydet', async () => {
       await d.saveAs.psd(psd, { alphaChannels: true, embedColorProfile: true }, true);
       if (png) await d.saveAs.png(png, { compression: 6 }, true);
