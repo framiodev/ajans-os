@@ -435,11 +435,21 @@ function verifyBridgeUpgrade(req, url) {
 }
 
 // UXP 'localhost' adresini IPv4 veya IPv6'ya çözebilir; ikisini de yalnızca yerel arayüzde dinle.
-for (const host of ['127.0.0.1', '::1']) {
-  const server = http.createServer(app);
-  attachWebSocket(server, { path: '/ps', verify: verifyBridgeUpgrade, onConnection: c => bridge.attach(c) });
-  server.on('error', err => { if (host === '127.0.0.1') throw err; });
-  server.listen(PORT, host, () => {
-    if (host === '127.0.0.1') console.log(`AjansOS Backend calisiyor: http://127.0.0.1:${PORT}`);
-  });
-}
+// serverReady: IPv4 dinleyici hazır olunca çözülür, port dolu/yasaklıysa gerçek hata ile reddedilir
+// (Electron bunu kullanıcıya açıkça gösterir).
+export const serverReady = new Promise((resolve, reject) => {
+  for (const host of ['127.0.0.1', '::1']) {
+    const server = http.createServer(app);
+    attachWebSocket(server, { path: '/ps', verify: verifyBridgeUpgrade, onConnection: c => bridge.attach(c) });
+    server.on('error', err => {
+      if (host === '127.0.0.1') reject(err);
+      else console.warn(`IPv6 dinleyici açılamadı (${err.code || err.message}); IPv4 ile devam ediliyor.`);
+    });
+    server.listen(PORT, host, () => {
+      if (host === '127.0.0.1') {
+        console.log(`AjansOS Backend calisiyor: http://127.0.0.1:${PORT}`);
+        resolve();
+      }
+    });
+  }
+});
