@@ -1,5 +1,6 @@
 const { app, BrowserWindow, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const { createUpdater } = require('./updater.cjs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -79,38 +80,15 @@ async function createWindow() {
 
   await mainWindow.loadURL(APP_ORIGIN);
 
-  // GitHub Releases Otomatik Güncelleme Kontrolü
-  global.triggerAjansUpdateCheck = async () => {
-    if (!app.isPackaged) return { ok: true, message: 'Geliştirme modunda otomatik güncelleme kapalı.' };
-    try {
-      const res = await autoUpdater.checkForUpdates();
-      const latest = res?.updateInfo?.version;
-      if (latest && latest !== app.getVersion()) {
-        return { ok: true, message: `Yeni sürüm bulundu (v${latest}). Arka planda indiriliyor, bitince kurulum penceresi açılacak...` };
-      }
-      return { ok: true, message: `Uygulama güncel (v${app.getVersion()}).` };
-    } catch (e) {
-      return { ok: false, message: 'Güncelleme kontrol hatası: ' + e.message };
-    }
-  };
-
-  if (app.isPackaged) {
-    autoUpdater.autoDownload = true;
-    autoUpdater.on('update-downloaded', (info) => {
-      dialog
-        .showMessageBox(mainWindow, {
-          type: 'info',
-          title: 'Yeni Sürüm Hazır',
-          message: `FramioMedia AjansOS v${info.version} indirildi.`,
-          detail: 'Güncellemeyi uygulamak için uygulamayı şimdi yeniden başlatmak ister misiniz?',
-          buttons: ['Şimdi Güncelle', 'Daha Sonra']
-        })
-        .then((res) => {
-          if (res.response === 0) autoUpdater.quitAndInstall();
-        });
-    });
-    autoUpdater.checkForUpdatesAndNotify().catch(() => {});
-  }
+  // GitHub Releases üzerinden uygulama içi güncelleme (açılışta + 4 saatte bir).
+  const updater = createUpdater({
+    autoUpdater,
+    currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+    log: (m) => console.log('[updater]', m)
+  });
+  global.ajansUpdater = updater;
+  updater.start();
 }
 
 if (app.requestSingleInstanceLock()) app.whenReady().then(createWindow);

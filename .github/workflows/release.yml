@@ -35,23 +35,44 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Sürüm etiketi zaten yayında mı?
+        id: gate
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $v = (Get-Content package.json | ConvertFrom-Json).version
+          gh release view "v$v" 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            echo "skip=true" >> $env:GITHUB_OUTPUT
+            echo "::notice::v$v zaten yayında. Kullanıcılara güncelleme gitmesi için package.json sürümünü artırın."
+          } else {
+            echo "skip=false" >> $env:GITHUB_OUTPUT
+          }
+          $global:LASTEXITCODE = 0
+
       - name: Setup Node.js
+        if: steps.gate.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install root dependencies
+        if: steps.gate.outputs.skip != 'true'
         run: npm ci
 
       - name: Install backend dependencies
+        if: steps.gate.outputs.skip != 'true'
         working-directory: backend
         run: npm ci
 
       - name: Install frontend dependencies
+        if: steps.gate.outputs.skip != 'true'
         working-directory: frontend
         run: npm ci
 
       - name: Build Windows Installer (.exe + latest.yml)
+        if: steps.gate.outputs.skip != 'true'
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
@@ -61,6 +82,7 @@ jobs:
           npx electron-builder --win nsis --publish never
 
       - name: Read Version
+        if: steps.gate.outputs.skip != 'true'
         id: pkg
         shell: pwsh
         run: |
@@ -68,6 +90,7 @@ jobs:
           echo "version=$v" >> $env:GITHUB_OUTPUT
 
       - name: Publish GitHub Release
+        if: steps.gate.outputs.skip != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.pkg.outputs.version }}
