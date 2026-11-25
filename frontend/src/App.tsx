@@ -97,6 +97,7 @@ export default function App() {
   const [qaScore, setQaScore] = useState<number | null>(null);
   const [qaBars, setQaBars] = useState<Record<string, number> | null>(null);
   const [psStatus, setPsStatus] = useState<{ connected: boolean; photoshop?: string; plugin?: string }>({ connected: false });
+  const [upd, setUpd] = useState<{ status: string; current?: string; latest?: string | null; percent?: number; error?: string | null }>({ status: 'idle' });
   const [psInfo, setPsInfo] = useState<{ token: string; port: number } | null>(null);
   const [qaChecks, setQaChecks] = useState<{ id: string; label: string; ok: boolean; detail?: string }[]>([]);
   const [qaCritique, setQaCritique] = useState('Henüz denetim yapılmadı.');
@@ -140,7 +141,15 @@ export default function App() {
     poll();
     fetch('/api/ps/info').then(r => (r.ok ? r.json() : null)).then(j => { if (alive && j) setPsInfo(j); }).catch(() => {});
     const t = setInterval(poll, 3000);
-    return () => { alive = false; clearInterval(t); };
+    const pollUpd = async () => {
+      try {
+        const r = await fetch('/api/system/update-status');
+        if (alive && r.ok) setUpd(await r.json());
+      } catch {}
+    };
+    pollUpd();
+    const t2 = setInterval(pollUpd, 5000);
+    return () => { alive = false; clearInterval(t); clearInterval(t2); };
   }, []);
 
   useEffect(() => {
@@ -199,15 +208,39 @@ export default function App() {
   };
 
   const handleCheckUpdate = async () => {
-    notify('Uygulama içi güncelleme kontrol ediliyor...');
+    setUpd(u => ({ ...u, status: 'checking' }));
     try {
       const res = await fetch('/api/system/check-update');
       const data = await res.json();
-      notify(data.message || 'Güncelleme durumu alındı.');
+      setUpd(data);
+      if (data.status === 'dev') notify('Geliştirme modunda güncelleme denetimi kapalı; yalnızca kurulu uygulamada çalışır.');
+      else if (data.status === 'uptodate') notify(`Uygulama güncel (v${data.current}).`);
     } catch {
       notify('Güncelleme sunucusuna ulaşılamadı.');
     }
   };
+
+  const handleInstallUpdate = async () => {
+    try {
+      const res = await fetch('/api/system/install-update', { method: 'POST' });
+      const data = await res.json();
+      notify(data.message || 'Güncelleme kuruluyor.');
+    } catch {
+      notify('Güncelleme başlatılamadı.');
+    }
+  };
+
+  const updText = (() => {
+    switch (upd.status) {
+      case 'checking': return 'Denetleniyor…';
+      case 'uptodate': return 'Güncel';
+      case 'downloading': return `v${upd.latest} iniyor %${upd.percent ?? 0}`;
+      case 'ready': return `v${upd.latest} hazır`;
+      case 'error': return 'Denetlenemedi';
+      case 'dev': return 'Geliştirme modu';
+      default: return 'Denetlenmedi';
+    }
+  })();
 
   const handleSaveSettings = async () => {
     await fetch('/api/settings', {
@@ -522,9 +555,16 @@ export default function App() {
           <div className="flex justify-between"><span className="text-zinc-400">Gemini</span><span className={settings.gemini_api_key ? 'text-emerald-400 font-medium' : 'text-zinc-500'}>{settings.gemini_api_key ? 'Anahtar var' : 'Anahtar yok'}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Claude</span><span className={settings.claude_api_key ? 'text-emerald-400 font-medium' : 'text-zinc-500'}>{settings.claude_api_key ? 'Anahtar var' : 'Anahtar yok'}</span></div>
           <div className="pt-2 border-t border-zinc-800 space-y-2">
-            <button onClick={handleCheckUpdate} className="w-full py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 text-[11px] font-medium text-zinc-200 cursor-pointer">
-              Güncellemeleri Denetle
-            </button>
+            <div className="flex justify-between"><span className="text-zinc-400">Güncelleme</span><span className={upd.status === 'ready' ? 'text-emerald-400 font-medium' : upd.status === 'error' ? 'text-amber-400' : 'text-zinc-300'} title={upd.error || ''}>{updText}</span></div>
+            {upd.status === 'ready' ? (
+              <button onClick={handleInstallUpdate} className="w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-[11px] font-semibold text-white cursor-pointer">
+                Yeniden başlat ve güncelle
+              </button>
+            ) : (
+              <button onClick={handleCheckUpdate} disabled={upd.status === 'checking' || upd.status === 'downloading'} className="w-full py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 disabled:opacity-50 text-[11px] font-medium text-zinc-200 cursor-pointer">
+                Güncellemeleri Denetle
+              </button>
+            )}
           </div>
         </div>
       </aside>

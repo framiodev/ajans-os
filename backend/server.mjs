@@ -308,18 +308,31 @@ app.post('/api/adobe/illustrator/create', async (req, res) => {
   }
 });
 
+function devUpdateState() {
+  const pkgPath = path.resolve(__dirname, '../package.json');
+  const current = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version;
+  return { status: 'dev', current, latest: null, percent: 0, error: null, checkedAt: null };
+}
+
+app.get('/api/system/update-status', (_req, res) => {
+  try {
+    res.json(global.ajansUpdater ? global.ajansUpdater.getState() : devUpdateState());
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
 app.get('/api/system/check-update', async (_req, res) => {
   try {
-    if (typeof global.triggerAjansUpdateCheck === 'function') {
-      const result = await global.triggerAjansUpdateCheck();
-      return res.json(result);
-    }
-    const pkgPath = path.resolve(__dirname, '../package.json');
-    const currentVersion = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || '1.2.5';
-    res.json({ ok: true, currentVersion, message: `Sürüm v${currentVersion}. Güncelleme denetimi yalnızca kurulu uygulamada çalışır (geliştirme modunda kontrol edilmez).` });
+    res.json(global.ajansUpdater ? await global.ajansUpdater.check() : devUpdateState());
   } catch (err) {
-    res.json({ ok: false, message: 'Güncelleme kontrolü yapılamadı: ' + err.message });
+    res.status(500).json({ status: 'error', error: err.message });
   }
+});
+
+app.post('/api/system/install-update', (_req, res) => {
+  if (!global.ajansUpdater) return res.status(400).json({ ok: false, message: 'Güncelleme yalnızca kurulu uygulamada çalışır.' });
+  res.json(global.ajansUpdater.install());
 });
 
 // Vision QA & Design Memory Endpoints (Faz 4)
