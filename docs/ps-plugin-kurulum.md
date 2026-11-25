@@ -1,4 +1,4 @@
-# AjansOS Photoshop Köprüsü — Kurulum ve Deneme (Photoshop 27.0)
+# AjansOS Photoshop Köprüsü — Kurulum ve Deneme (Photoshop 28.0)
 
 Bu eklenti, AjansOS'un Photoshop'ta katmanlı PSD üretmesini ve revize etmesini sağlar. Photoshop ile AjansOS arasındaki bağlantı yalnızca bu bilgisayarda (localhost) çalışır.
 
@@ -12,7 +12,7 @@ Bu eklenti, AjansOS'un Photoshop'ta katmanlı PSD üretmesini ve revize etmesini
 ## 2. Bağlanma
 1. AjansOS'u açın → **API Bağlantıları** ekranı → "Photoshop Köprüsü" kutusundaki **port** ve **bağlantı anahtarını** görün.
 2. Photoshop'taki AjansOS panelinde portu yazın (kurulu uygulama: `4190`, `start-ajansos.bat` ile geliştirme: `4010`), anahtarı yapıştırın, **Bağlan**'a basın.
-3. Panel yeşil "Bağlı — Photoshop 27.0…" gösterir; AjansOS kenar çubuğunda **Photoshop: Bağlı** yazar. Anahtar panelde saklanır; sonraki açılışlarda otomatik bağlanır.
+3. Panel yeşil "Bağlı — Photoshop 28.0…" gösterir; AjansOS kenar çubuğunda **Photoshop: Bağlı** yazar. Anahtar panelde saklanır; sonraki açılışlarda otomatik bağlanır.
 
 ## 3. Deneme listesi (lütfen sonuçları bildirin)
 | # | Deneme | Beklenen |
@@ -26,7 +26,7 @@ Bu eklenti, AjansOS'un Photoshop'ta katmanlı PSD üretmesini ve revize etmesini
 | T7 | Yanlış anahtar / Photoshop kapalı | Açık hata mesajı, çökme yok |
 
 ## 4. Hata olursa
-UXP Developer Tool'da eklentinin yanındaki **Debug** düğmesi bir konsol açar. Kırmızı hata satırını ve AjansOS'ta görünen hata mesajını bana iletin. Özellikle şu noktalar Photoshop 27.0'da henüz doğrulanmadı:
+UXP Developer Tool'da eklentinin yanındaki **Debug** düğmesi bir konsol açar. Kırmızı hata satırını ve AjansOS'ta görünen hata mesajını bana iletin. Özellikle şu noktalar Photoshop 28.0'da henüz doğrulanmadı:
 - `documents.add` içindeki `name` seçeneği (yoksa otomatik ad kullanılır)
 - `createTextLayer` seçenekleri (yazı tipi adı, renk, konum)
 - `createLayerGroup({ fromLayers })` ile gruplama
