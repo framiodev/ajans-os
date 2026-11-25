@@ -3,7 +3,7 @@ const photoshop = require('photoshop');
 const uxp = require('uxp');
 const { app, core, action, constants } = photoshop;
 const fsx = uxp.storage.localFileSystem;
-const PLUGIN_VERSION = '0.1.1';
+const PLUGIN_VERSION = '0.1.2';
 // Photoshop 28'de app.version boş gelebiliyor; sırayla farklı kaynaklardan oku.
 function psVersion() {
   try {
@@ -25,6 +25,13 @@ function load(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { r
 
 // ---------- yardımcılar ----------
 const num = v => (v && typeof v === 'object') ? Number(v._value !== undefined ? v._value : (v.value !== undefined ? v.value : v)) : Number(v);
+// DOM çağrıları (createTextLayer) düz nesne değil SolidColor örneği ister.
+function solidColor(hex) {
+  const c = new app.SolidColor();
+  const { red, green, blue } = rgb(hex);
+  c.rgb.red = red; c.rgb.green = green; c.rgb.blue = blue;
+  return c;
+}
 function rgb(hex) { const n = parseInt(hex.slice(1), 16); return { red: (n >> 16) & 255, green: (n >> 8) & 255, blue: n & 255 }; }
 function modal(name, fn) { return core.executeAsModal(fn, { commandName: name }); }
 function activeDoc() { const d = app.activeDocument; if (!d) throw new Error('Açık belge yok'); return d; }
@@ -133,7 +140,7 @@ const handlers = {
       created = await d.createTextLayer({
         contents: String(a.contents).replace(/\n/g, '\r'),
         fontSize: a.size,
-        textColor: rgb(a.color),
+        textColor: solidColor(a.color),
         position: { x: a.x, y: a.y },
         ...(f.ps ? { fontName: f.ps } : {})
       });
