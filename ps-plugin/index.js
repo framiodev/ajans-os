@@ -3,7 +3,7 @@ const photoshop = require('photoshop');
 const uxp = require('uxp');
 const { app, core, action, constants } = photoshop;
 const fsx = uxp.storage.localFileSystem;
-const PLUGIN_VERSION = '0.1.4';
+const PLUGIN_VERSION = '0.2.0';
 // Photoshop 28'de app.version boş gelebiliyor; sırayla farklı kaynaklardan oku.
 function psVersion() {
   try {
@@ -32,7 +32,59 @@ function solidColor(hex) {
   c.rgb.red = red; c.rgb.green = green; c.rgb.blue = blue;
   return c;
 }
+const rgbDesc = hex => { const c = rgb(hex); return { _obj: 'RGBColor', red: c.red, grain: c.green, blue: c.blue }; };
+const px = v => ({ _unit: 'pixelsUnit', _value: v });
+function boundsOf(layer) { const b = layer.bounds; return { left: num(b.left), top: num(b.top), right: num(b.right), bottom: num(b.bottom) }; }
 function rgb(hex) { const n = parseInt(hex.slice(1), 16); return { red: (n >> 16) & 255, green: (n >> 8) & 255, blue: n & 255 }; }
+function modal(name, fn) { return core.executeAsModal(fn, { commandName: name }); }
+function activeDoc() { const d = app.activeDocument; if (!d) throw new Error('Açık belge yok'); return d; }
+// UXP, verilen yolu kendisi yüzde-kodlar; önceden kodlarsak "Ali%20Kaan" -> "Ali%2520Kaan" olur.
+// Bu yüzden önce ham yolu dene, olmazsa kodlu biçime düş.
+function toUrls(p) {
+  const path = String(p).replace(/\\/g, '/').replace(/^\/+/, '');
+  const raw = 'file:/' + path;
+  const enc = 'file:/' + encodeURI(path);
+  return raw === enc ? [raw] : [raw, enc];
+}
+async function entryAt(p, create) {
+  let lastErr;
+  for (const url of toUrls(p)) {
+    try {
+      return create ? await fsx.createEntryWithUrl(url, { overwrite: true }) : await fsx.getEntryWithUrl(url);
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
+function kindOf(layer) {
+  const k = String(layer.kind || '').toLowerCase();
+  if (k.indexOf('text') >= 0) return 'text';
+  if (k.indexOf('group') >= 0) return 'group';
+  if (k.indexOf('smart') >= 0) return 'smartObject';
+  if (k.indexOf('solid') >= 0) return 'solid';
+  return k.indexOf('pixel') >= 0 ? 'pixel' : (k || 'other');
+}
+
+function fontList() { try { return Array.from(app.fonts || []); } catch (e) { return []; } }
+function resolveFont(name, weight) {
+  if (!name) return { ps: undefined, found: undefined, weightFound: undefined };
+  const fonts = fontList();
+  if (!fonts.length) return { ps: name, found: undefined, weightFound: undefined };
+  const exact = fonts.find(f => f.postScriptName === name);
+  if (exact) return { ps: exact.postScriptName, found: true, weightFound: weight ? undefined : true };
+  const fam = fonts.filter(f => f.family === name || f.name === name);
+  if (fam.length) {
+    const st = f => String(f.style || '');
+    let pick, weightFound = true;
+    if (weight === 'bold') {
+      pick = fam.find(f => /^bold$/i.test(st(f))) || fam.find(f => /bold/i.test(st(f)) && !/semi|demi|extra|black|italic|oblique/i.test(st(f)));
+      if (!pick) weightFound = false;
+    }
+    pick = pick || fam.find(f => /^(regular|roman|normal)$/i.test(st(f))) || fam[0];
+    return { ps: pick.postScriptName, found: true, weightFound };
+  }
+  return { ps: undefined, found: false, weightFound: undefined };
+}
 function modal(name, fn) { return core.executeAsModal(fn, { commandName: name }); }
 function activeDoc() { const d = app.activeDocument; if (!d) throw new Error('Açık belge yok'); return d; }
 // UXP, verilen yolu kendisi yüzde-kodlar; önceden kodlarsak "Ali%20Kaan" -> "Ali%2520Kaan" olur.
@@ -109,6 +161,38 @@ function findLayer(name, layers) {
   return out[0];
 }
 
+// Dikdörtgen/yuvarlak köşeli/elips şekil katmanı (batchPlay). Kenarlık katman efektiyle verilir.
+async function makeShape(kind, a, warnings) {
+  await modal('AjansOS: şekil', async () => {
+    const shape = kind === 'ellipse'
+      ? { _obj: 'ellipse', top: px(a.y), left: px(a.x), bottom: px(a.y + a.h), right: px(a.x + a.w) }
+      : { _obj: 'rect', unitValueQuadVersion: 1, top: px(a.y), left: px(a.x), bottom: px(a.y + a.h), right: px(a.x + a.w),
+          topRight: px(a.radius || 0), topLeft: px(a.radius || 0), bottomLeft: px(a.radius || 0), bottomRight: px(a.radius || 0) };
+    await action.batchPlay([{
+      _obj: 'make', _target: [{ _ref: 'contentLayer' }],
+      using: { _obj: 'contentLayer', type: { _obj: 'solidColorLayer', color: rgbDesc(a.color) }, shape },
+      _options: { dialogOptions: 'dontDisplay' }
+    }], {});
+    const layer = activeDoc().activeLayers[0];
+    layer.name = a.name;
+    if (a.opacity !== undefined && a.opacity < 100) layer.opacity = a.opacity;
+    if (a.stroke) {
+      try {
+        await action.batchPlay([{
+          _obj: 'set',
+          _target: [{ _ref: 'property', _property: 'layerEffects' }, { _ref: 'layer', _enum: 'ordinal', _value: 'targetEnum' }],
+          to: { _obj: 'layerEffects', scale: { _unit: 'percentUnit', _value: 100 },
+            frameFX: { _obj: 'frameFX', enabled: true, present: true, showInDialog: true,
+              style: { _enum: 'frameStyle', _value: 'insetFrame' }, paintType: { _enum: 'frameFill', _value: 'solidColor' },
+              mode: { _enum: 'blendMode', _value: 'normal' }, opacity: { _unit: 'percentUnit', _value: 100 },
+              size: px(a.stroke.width), color: rgbDesc(a.stroke.color), overprint: false } },
+          _options: { dialogOptions: 'dontDisplay' }
+        }], {});
+      } catch (e) { warnings.push('kenarlık uygulanamadı'); }
+    }
+  });
+}
+
 // ---------- işlemler ----------
 const handlers = {
   async ping() { return { pong: true, photoshop: psVersion(), hasDoc: !!app.activeDocument }; },
@@ -150,19 +234,86 @@ const handlers = {
   },
 
   async 'layer.text'(a) {
-    const d = activeDoc(), f = resolveFont(a.font);
+    const d = activeDoc(), f = resolveFont(a.font, a.weight);
+    const warnings = [];
     let created;
     await modal('AjansOS: metin', async () => {
       created = await d.createTextLayer({
         contents: String(a.contents).replace(/\n/g, '\r'),
         fontSize: a.size,
         textColor: solidColor(a.color),
-        position: { x: a.x, y: a.y },
+        position: { x: a.x, y: (a.y !== undefined ? a.y : 0) + a.size },
         ...(f.ps ? { fontName: f.ps } : {})
       });
       created.name = a.name;
+      const cs = created.textItem.characterStyle;
+      if (a.tracking !== undefined) { try { cs.tracking = a.tracking; } catch (e) { warnings.push('tracking uygulanamadı'); } }
+      if (a.leading !== undefined) { try { cs.autoLeading = false; cs.leading = a.leading; } catch (e) { warnings.push('satır aralığı uygulanamadı'); } }
+      if (a.weight === 'bold' && f.weightFound === false) warnings.push('kalın stil bulunamadı, normal kullanıldı');
+      // Gerçek ölçüye göre yerleştir: üst kenar ve hizalama
+      const b = boundsOf(created);
+      let top = a.y;
+      if (a.afterLayer !== undefined) top = boundsOf(findLayer(a.afterLayer)).bottom + (a.gap || 0);
+      const ax = a.align === 'right' ? b.right : a.align === 'center' ? (b.left + b.right) / 2 : b.left;
+      const dx = a.x - ax, dy = top - b.top;
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) await created.translate(dx, dy);
     });
-    return { name: a.name, fontUsed: f.ps || 'varsayılan', fontFound: f.found };
+    const nb = boundsOf(created);
+    return { name: a.name, bounds: nb, fontUsed: f.ps || 'varsayılan', fontFound: f.found, warnings };
+  },
+
+  async 'shape.rect'(a) {
+    const warnings = [];
+    let y = a.y;
+    if (a.afterLayer !== undefined) y = boundsOf(findLayer(a.afterLayer)).bottom + (a.gap || 0);
+    await makeShape('rect', { ...a, y }, warnings);
+    return { name: a.name, bounds: boundsOf(findLayer(a.name)), warnings };
+  },
+
+  async 'shape.ellipse'(a) {
+    const warnings = [];
+    await makeShape('ellipse', a, warnings);
+    return { name: a.name, bounds: boundsOf(findLayer(a.name)), warnings };
+  },
+
+  async 'shape.behindText'(a) {
+    const warnings = [];
+    const t = findLayer(a.textLayer);
+    const b = boundsOf(t);
+    let w = (b.right - b.left) + a.padX * 2;
+    let x = b.left - a.padX;
+    if (a.minW && w < a.minW) { x -= (a.minW - w) / 2; w = a.minW; }
+    const h = (b.bottom - b.top) + a.padY * 2;
+    const radius = a.radius === undefined ? 0 : Math.min(a.radius, h / 2);
+    await makeShape('rect', { name: a.name, x, y: b.top - a.padY, w, h, color: a.color, radius, opacity: a.opacity, stroke: a.stroke }, warnings);
+    // Metnin hemen altına al (z-sırası)
+    await modal('AjansOS: sırala', async () => {
+      const shape = findLayer(a.name);
+      shape.move(findLayer(a.textLayer), constants.ElementPlacement.PLACEAFTER);
+    });
+    return { name: a.name, bounds: boundsOf(findLayer(a.name)), warnings };
+  },
+
+  async 'layer.image'(a) {
+    const entry = await entryAt(a.path, false);
+    const token = fsx.createSessionToken(entry);
+    await modal('AjansOS: görsel', async () => {
+      await action.batchPlay([{
+        _obj: 'placeEvent', null: { _path: token, _kind: 'local' },
+        freeTransformCenterState: { _enum: 'quadCenterState', _value: 'QCSAverage' },
+        offset: { _obj: 'offset', horizontal: px(0), vertical: px(0) },
+        _options: { dialogOptions: 'dontDisplay' }
+      }], {});
+      const layer = activeDoc().activeLayers[0];
+      layer.name = a.name;
+      // kapla (cover): kutuyu tamamen doldur, ortala
+      let b = boundsOf(layer);
+      const pct = Math.max(a.w / (b.right - b.left), a.h / (b.bottom - b.top)) * 100;
+      await layer.scale(pct, pct);
+      b = boundsOf(layer);
+      await layer.translate(a.x + a.w / 2 - (b.left + b.right) / 2, a.y + a.h / 2 - (b.top + b.bottom) / 2);
+    });
+    return { name: a.name, bounds: boundsOf(findLayer(a.name)) };
   },
 
   async 'layer.setText'(a) {
@@ -193,7 +344,11 @@ const handlers = {
 
   async 'group.create'(a) {
     const d = activeDoc();
-    const layers = a.layers.map(n => findLayer(n));
+    const layers = [];
+    for (const n of a.layers) {
+      try { layers.push(findLayer(n)); } catch (e) { if (!a.skipMissing) throw e; }
+    }
+    if (!layers.length) return { name: a.name, count: 0, skipped: true };
     await modal('AjansOS: grup', async () => {
       const g = await d.createLayerGroup({ name: a.name, fromLayers: layers });
       if (g && g.name !== a.name) g.name = a.name;

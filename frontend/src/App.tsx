@@ -59,6 +59,8 @@ interface StrategyItem {
 
 type ViewId = 'studio' | 'campaign' | 'calendar' | 'brands' | 'memory' | 'integrations';
 type FormatId = 'post' | 'story' | 'linkedin';
+interface LayerNode { name: string; kind: string; opacity?: number; visible?: boolean; children?: LayerNode[] }
+interface RecipeInfo { id: string; name: string; description: string }
 
 const DEFAULT_COPY: Record<string, { eyebrow: string; title: string; desc: string; cta: string }> = {
   vega: {
@@ -94,6 +96,12 @@ export default function App() {
   const [revInput, setRevInput] = useState('');
   const [revStatus, setRevStatus] = useState('');
   const [lastPsdPath, setLastPsdPath] = useState('');
+  const [layerTree, setLayerTree] = useState<LayerNode[] | null>(null);
+  const [lastPngPath, setLastPngPath] = useState('');
+  const [previewRev, setPreviewRev] = useState(0);
+  const [recipes, setRecipes] = useState<RecipeInfo[]>([]);
+  const [recipeId, setRecipeId] = useState('');
+  const [genInfo, setGenInfo] = useState<{ recipe?: string; notes: string[]; warnings: string[] } | null>(null);
   const [qaScore, setQaScore] = useState<number | null>(null);
   const [qaBars, setQaBars] = useState<Record<string, number> | null>(null);
   const [psStatus, setPsStatus] = useState<{ connected: boolean; photoshop?: string; plugin?: string }>({ connected: false });
@@ -148,6 +156,7 @@ export default function App() {
       } catch {}
     };
     pollUpd();
+    fetch('/api/recipes').then(r => (r.ok ? r.json() : [])).then(j => { if (alive) setRecipes(j); }).catch(() => {});
     const t2 = setInterval(pollUpd, 5000);
     return () => { alive = false; clearInterval(t); clearInterval(t2); };
   }, []);
@@ -301,11 +310,15 @@ export default function App() {
         const res = await fetch('/api/ps/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ brand_id: activeBrand.id, copy, format })
+          body: JSON.stringify({ brand_id: activeBrand.id, copy, format, recipe: recipeId || undefined, heroImagePath: selectedHeroPath || undefined })
         });
         const data = await res.json();
         if (data.ok) {
           setLastPsdPath(data.psdPath);
+          setLastPngPath(data.pngPath || '');
+          setPreviewRev(r => r + 1);
+          setLayerTree(data.layers || null);
+          setGenInfo({ recipe: data.recipe?.name, notes: data.notes || [], warnings: data.warnings || [] });
           setQaChecks(data.lint.checks);
           setQaScore(null);
           setQaBars(null);
@@ -397,6 +410,8 @@ export default function App() {
         const data = await res.json();
         if (data.ok) {
           setRevStatus(`${data.layer}: punto ${data.sizeBefore} → ${data.sizeAfter} (Photoshop'tan doğrulandı).`);
+          if (data.layers) setLayerTree(data.layers);
+          if (data.pngPath) { setLastPngPath(data.pngPath); setPreviewRev(r => r + 1); }
           setQaChecks(data.lint.checks);
           setQaScore(null);
           setQaBars(null);
@@ -465,13 +480,15 @@ export default function App() {
         ? { w: 280, h: 495, label: '1080 × 1920 px' }
         : { w: 480, h: 270, label: '1920 × 1080 px' };
 
-  const layers = [
-    { name: 'Ana_Baslik_H1', type: 'T', opacity: '100%' },
-    { name: 'Alt_Aciklama', type: 'T', opacity: '90%' },
-    { name: 'CTA_Buton_Grubu', type: '▢', opacity: '100%' },
-    { name: 'Logo_SmartObject', type: '◆', opacity: '100%' },
-    { name: 'Okunabilirlik_Gradient', type: '◐', opacity: '75%' }
-  ];
+  const kindIcon = (k: string) => (k === 'text' ? 'T' : k === 'group' ? '▸' : k === 'smartObject' ? '◆' : k === 'pixel' ? '▪' : '▢');
+  const layers: { name: string; type: string; opacity: string; depth: number }[] = [];
+  const walkLayers = (nodes: LayerNode[] | null, depth: number) => {
+    for (const n of nodes || []) {
+      layers.push({ name: n.name, type: kindIcon(n.kind), opacity: n.opacity !== undefined ? `${Math.round(n.opacity)}%` : '', depth });
+      if (n.children) walkLayers(n.children, depth + 1);
+    }
+  };
+  walkLayers(layerTree, 0);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100">
@@ -603,12 +620,18 @@ export default function App() {
             <div className="w-full lg:w-60 shrink-0 border-r border-zinc-800 bg-zinc-900/40 flex flex-col">
               <div className="px-3.5 py-2.5 border-b border-zinc-800 flex items-center justify-between text-xs">
                 <span className="font-semibold">Katmanlar (PSD)</span>
-                <span className="font-mono text-[11px] text-zinc-500">{layers.length} Katman</span>
+                <span className="font-mono text-[11px] text-zinc-500">{layerTree ? `${layers.length} Katman` : '—'}</span>
               </div>
               <div className="p-2 space-y-0.5 text-xs flex-1 overflow-y-auto">
-                {layers.map(l => (
+                {!layerTree && (
+                  <div className="px-2.5 py-3 text-[11px] text-zinc-500 leading-relaxed">
+                    Henüz Photoshop çıktısı yok. <b className="text-zinc-300">Photoshop PSD Üret</b> ile oluşturduğunuzda gerçek katman ağacı burada görünür.
+                  </div>
+                )}
+                {layers.map((l, i) => (
                   <div
-                    key={l.name}
+                    key={`${i}-${l.name}`}
+                    style={{ paddingLeft: 10 + l.depth * 14 }}
                     onClick={() => setSelectedLayer(l.name)}
                     className={`flex items-center justify-between px-2.5 py-2 rounded cursor-pointer transition ${
                       selectedLayer === l.name ? 'bg-zinc-800 border-l-2 border-indigo-400 text-white' : 'text-zinc-300 hover:bg-zinc-800/50'
@@ -640,6 +663,13 @@ export default function App() {
                   ))}
                 </div>
                 <div className="flex items-center gap-3 text-[11px] text-zinc-400">
+                  <label className="flex items-center gap-1.5">
+                    Düzen
+                    <select value={recipeId} onChange={e => setRecipeId(e.target.value)} className="bg-zinc-900 border border-zinc-800 rounded px-1.5 py-0.5 text-zinc-200 text-[11px]">
+                      <option value="">Otomatik (marka ailesi)</option>
+                      {recipes.map(r => <option key={r.id} value={r.id} title={r.description}>{r.name}</option>)}
+                    </select>
+                  </label>
                   <label className="flex items-center gap-1.5 cursor-pointer">
                     <input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} className="accent-indigo-500" /> Grid
                   </label>
@@ -650,43 +680,36 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
+              <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-auto gap-3">
                 <div
-                  className="relative rounded-xl overflow-hidden shadow-2xl transition-all duration-300 flex flex-col justify-between p-7 bg-cover bg-center"
-                  style={{
-                    width: artSize.w,
-                    height: artSize.h,
-                    backgroundImage: selectedHeroPath
-                      ? `linear-gradient(90deg, ${activeBrand.primary_color}cc 0%, ${activeBrand.primary_color}44 65%, transparent 100%), url(/api/asset-file?path=${encodeURIComponent(selectedHeroPath)})`
-                      : `linear-gradient(145deg, ${activeBrand.primary_color} 0%, ${activeBrand.secondary_color} 100%)`,
-                    color: '#F8FAFC'
-                  }}
+                  className="relative rounded-xl overflow-hidden shadow-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center"
+                  style={{ width: artSize.w, height: artSize.h }}
                 >
+                  {lastPngPath ? (
+                    <img
+                      key={previewRev}
+                      src={`/api/asset-file?path=${encodeURIComponent(lastPngPath)}&v=${previewRev}`}
+                      alt="Photoshop çıktısı"
+                      className="w-full h-full object-contain"
+                      onError={() => notify('Önizleme yüklenemedi (PNG bulunamadı).')}
+                    />
+                  ) : (
+                    <div className="px-6 text-center text-[11px] text-zinc-500 leading-relaxed">
+                      <div className="text-zinc-300 text-xs font-semibold mb-1.5">Henüz önizleme yok</div>
+                      Photoshop bağlıyken <b className="text-zinc-300">Photoshop PSD Üret</b>'e basın. Burada Photoshop'un ürettiği gerçek görsel görünür.
+                      {!psStatus.connected && <div className="mt-2 text-amber-400">Photoshop şu an bağlı değil.</div>}
+                    </div>
+                  )}
                   {showGrid && <div className="absolute inset-0 pointer-events-none grid-overlay" />}
                   {showSafe && <div className="absolute inset-5 pointer-events-none safe-zone rounded" />}
-
-                  <div className="relative z-10 flex items-center justify-between">
-                    <span className="text-[10px] font-semibold tracking-widest uppercase px-2.5 py-1 rounded bg-white/10 border border-white/15">
-                      {copy.eyebrow}
-                    </span>
-                    <span className="text-xs font-extrabold tracking-widest uppercase" style={{ color: activeBrand.accent_color }}>
-                      {activeBrand.name.split(' ')[0]}
-                    </span>
-                  </div>
-
-                  <div className="relative z-10 my-auto py-4">
-                    <div className="w-12 h-0.5 mb-3" style={{ background: activeBrand.accent_color }} />
-                    <div className="text-2xl font-extrabold leading-tight tracking-tight">{copy.title}</div>
-                    <div className="text-xs mt-2.5 leading-relaxed opacity-85">{copy.desc}</div>
-                  </div>
-
-                  <div className="relative z-10 flex items-center justify-between pt-3 border-t border-white/10">
-                    <span className="text-xs font-bold px-4 py-2 rounded-lg" style={{ background: activeBrand.accent_color, color: activeBrand.primary_color }}>
-                      {copy.cta}
-                    </span>
-                    <span className="text-[10px] opacity-60 font-mono">{activeBrand.website || 'framiomedia.com'}</span>
-                  </div>
                 </div>
+                {genInfo && (
+                  <div className="text-[11px] text-zinc-400 max-w-md text-center space-y-0.5">
+                    {genInfo.recipe && <div>Düzen: <span className="text-zinc-200">{genInfo.recipe}</span></div>}
+                    {genInfo.warnings.map((w, i) => <div key={`w${i}`} className="text-amber-400">⚠ {w}</div>)}
+                    {genInfo.notes.map((n, i) => <div key={`n${i}`} className="text-zinc-500">{n}</div>)}
+                  </div>
+                )}
               </div>
 
               <div className="p-3.5 border-t border-zinc-800 bg-zinc-900/50">

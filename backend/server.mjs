@@ -14,7 +14,7 @@ import { evaluateDesign } from './services/visionQa.mjs';
 import { bridge } from './services/ps/bridge.mjs';
 import { attachWebSocket } from './services/ps/wsServer.mjs';
 import { lintSnapshot } from './services/ps/lint.mjs';
-import { buildPostOps } from './services/ps/layout.mjs';
+import { buildOps, listRecipes } from './services/ps/recipes.mjs';
 import { parseRevision, pickLayer } from './services/ps/revise.mjs';
 import { safeFormat, safeSegment } from './security.mjs';
 
@@ -383,20 +383,27 @@ app.post('/api/ps/snapshot', async (req, res) => {
   }
 });
 
+app.get('/api/recipes', (_req, res) => res.json(listRecipes()));
+
 app.post('/api/ps/generate', async (req, res) => {
   try {
-    const { brand_id, copy, format } = req.body || {};
+    const { brand_id, copy, format, recipe, heroImagePath } = req.body || {};
     const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
     if (!brand) return res.status(404).json({ ok: false, error: 'Marka bulunamadi' });
     const fmt = safeFormat(format);
+    let hero;
+    if (heroImagePath) {
+      hero = validatedPath(heroImagePath, allowedImageRoots(), IMAGE_EXTS);
+      if (!hero) return res.status(400).json({ ok: false, error: 'Gecersiz gorsel yolu (yalnizca cikti ve marka varlik klasorleri)' });
+    }
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     const base = `${safeSegment(brand.id, 'brand')}_${fmt}_${Date.now()}`;
     const psdPath = path.join(OUTPUT_DIR, `${base}.psd`);
     const pngPath = path.join(OUTPUT_DIR, `${base}.png`);
-    const ops = buildPostOps({ brand, copy: copy || {}, format: fmt, psdPath, pngPath });
-    await bridge.runOps(ops, { timeoutMs: 60000 });
+    const ops = buildOps({ brand, copy: copy || {}, format: fmt, recipeId: typeof recipe === 'string' ? recipe : undefined, psdPath, pngPath, heroImagePath: hero });
+    const results = await bridge.runOps(ops, { timeoutMs: 60000 });
     const { snapshot, lint } = await snapshotAndLint(fmt);
-    res.json({ ok: true, psdPath, pngPath, lint, layers: snapshot.layers });
+    res.json({ ok: true, psdPath, pngPath, recipe: ops.recipe, scale: ops.scale, notes: ops.notes || [], warnings: results.warnings || [], lint, layers: snapshot.layers });
   } catch (err) {
     res.status(502).json({ ok: false, error: err.message, step: err.step ?? null });
   }
@@ -417,7 +424,7 @@ app.post('/api/ps/revise', async (req, res) => {
     const change = await bridge.request('layer.setTextSize', { name: layer.name, size: target });
     if (safePsd) await bridge.request('doc.save', { psdPath: safePsd, pngPath: safePsd.replace(/\.psd$/i, '.png') }, { timeoutMs: 60000 });
     const after = await snapshotAndLint(fmt);
-    res.json({ ok: true, layer: layer.name, sizeBefore: change.before, sizeAfter: change.after, lint: after.lint });
+    res.json({ ok: true, layer: layer.name, sizeBefore: change.before, sizeAfter: change.after, lint: after.lint, layers: after.snapshot.layers, pngPath: safePsd ? safePsd.replace(/\.psd$/i, '.png') : null });
   } catch (err) {
     res.status(502).json({ ok: false, error: err.message });
   }
