@@ -226,4 +226,5 @@ function connect() {
 $('port').value = load('ajansos.port', '4190');
 $('token').value = load('ajansos.token', '');
 $('connect').addEventListener('click', connect);
+$('token').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
 if ($('token').value) connect();
