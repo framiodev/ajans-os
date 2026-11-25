@@ -205,6 +205,26 @@ export const SEED_RECIPES = [
       { type: 'behindText', name: 'CTA_Button', of: 'CTA_Text', padX: 44, padY: 28, radius: 0, color: 'accentOnBg', minW: 320, group: 'CTA' },
       { type: 'text', name: 'URL_Text', bind: 'brand.url', size: 24, tracking: 60, color: 'muted', inset: 24, anchor: { bottom: true, offset: 0 }, optional: true, group: 'Footer' }
     ]
+  },
+  {
+    id: 'foto-hero',
+    manual: true,
+    name: 'Fotoğraflı Hero',
+    description: 'Tam kadraj fotoğraf, alttan koyulaşan perde (gradient) ve iri başlık. Şehir/rota/destinasyon gibi fotoğraf taşıyan duyurular için; fotoğraf yoksa marka renkli zemin kullanır.',
+    items: [
+      { type: 'bg', name: 'BG_Base', color: 'bg' },
+      { type: 'image', name: 'Visual_Hero', when: 'hero', optional: true, group: 'Visual' },
+      { type: 'gradient', name: 'Visual_Scrim', when: 'hero', color: 'bg', angle: 90, opacityStart: 0, opacityEnd: 88, group: 'Visual' },
+      { type: 'rect', name: 'Visual_Top_Scrim', when: 'hero', x: 'left', w: 'full', h: 220, color: 'bg', opacity: 45, anchor: { top: 0 }, group: 'Visual' },
+      { type: 'ellipse', name: 'Visual_Orb_A', when: '!hero', cx: { default: 0.8, story: 0.8, linkedin: 0.8 }, cy: { default: 0.3, story: 0.3, linkedin: 0.5 }, d: { default: 0.8, linkedin: 1 }, color: 'accentOnBg', opacity: 12, group: 'Visual' },
+      { type: 'text', name: 'Brand_Logo', bind: 'brand.name', upper: true, size: 30, bold: true, tracking: 220, color: 'fg', anchor: { topFrac: TOP }, group: 'Header' },
+      { type: 'text', name: 'Eyebrow_Text', bind: 'copy.eyebrow', upper: true, size: 26, bold: true, tracking: 200, color: 'accentOnBg', anchor: { topFrac: { default: 0.44, story: 0.44, linkedin: 0.34 } }, group: 'Copy' },
+      { type: 'text', name: 'Headline_H1', bind: 'copy.title', size: { default: 112, linkedin: 88 }, bold: true, color: 'fg', leadingMul: 1.02, maxWidth: 1, anchor: { after: ['Eyebrow_Text'], gap: 26 }, group: 'Copy' },
+      { type: 'text', name: 'Subcopy_Body', bind: 'copy.desc', size: 34, color: 'fgSoft', leadingMul: 1.36, maxWidth: { default: 0.84, linkedin: 0.9 }, anchor: { after: ['Headline_H1'], gap: 34 }, group: 'Copy' },
+      { type: 'text', name: 'CTA_Text', bind: 'copy.cta', upper: true, size: 28, bold: true, tracking: 160, color: 'onAccent', inset: 40, anchor: { after: ['Subcopy_Body', 'Headline_H1'], gap: 48 + 26 }, group: 'CTA' },
+      { type: 'behindText', name: 'CTA_Button', of: 'CTA_Text', padX: 40, padY: 26, radius: 'full', color: 'accentOnBg', minW: 300, group: 'CTA' },
+      { type: 'text', name: 'URL_Text', bind: 'brand.url', size: 24, tracking: 60, color: 'fgSoft', anchor: { bottom: true, offset: 0 }, optional: true, group: 'Footer' }
+    ]
   }
 ];
 
