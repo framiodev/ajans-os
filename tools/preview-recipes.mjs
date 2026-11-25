@@ -14,6 +14,7 @@ export function opsToSvg(ops, family = 'Inter') {
     if (o.op === 'layer.solid') body += `<rect width="${dc.width}" height="${dc.height}" fill="${a.color}"/>`;
     else if (o.op === 'shape.rect') { const b = est[a.name]; body += `<rect x="${a.x}" y="${b.top}" width="${a.w}" height="${a.h}" fill="${a.color}" opacity="${(a.opacity ?? 100) / 100}"/>`; }
     else if (o.op === 'shape.ellipse') body += `<ellipse cx="${a.x + a.w / 2}" cy="${a.y + a.h / 2}" rx="${a.w / 2}" ry="${a.h / 2}" fill="${a.color}" opacity="${(a.opacity ?? 100) / 100}"/>`;
+    else if (o.op === 'shape.arrow') { const t = a.thickness; body += `<rect x="${a.x}" y="${a.y}" width="${a.w}" height="${t}" rx="${t / 2}" fill="${a.color}"/>`; }
     else if (o.op === 'shape.behindText') {
       const b = est[a.name]; if (!b) continue;
       body += `<rect x="${b.left}" y="${b.top}" width="${b.right - b.left}" height="${b.bottom - b.top}" rx="${a.radius || 0}" fill="${a.color}" opacity="${(a.opacity ?? 100) / 100}" ${a.stroke ? `stroke="${a.stroke.color}" stroke-width="${a.stroke.width}"` : ''}/>`;

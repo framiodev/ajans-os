@@ -36,6 +36,17 @@ export function colorTokens(brand, opts = {}) {
   };
 }
 
+// ---------- yazı tipleri ----------
+const FONT_OK = /^[\w .-]{2,60}$/;
+// "Montserrat / Inter" gibi tek alanlı değerden başlık ve gövde fontlarını çıkarır; marka kiti öncelikli.
+export function brandFonts(brand) {
+  const parts = String(brand.font_family || '').split('/').map(x => x.trim()).filter(x => FONT_OK.test(x));
+  const heading = FONT_OK.test(brand.fontHeading || '') ? brand.fontHeading : parts[0];
+  const body = FONT_OK.test(brand.fontBody || '') ? brand.fontBody : (parts[1] || heading);
+  return { heading, body };
+}
+const isHeadingItem = name => /^(Headline|Price|Brand_Logo)/.test(name);
+
 // ---------- metin ----------
 const ARROWS = /[←-⇿➠-➿⬀-⯿»›▶►️]|\p{Extended_Pictographic}/gu;
 // Fontlarda çoğu zaman olmayan ok/emoji karakterlerini temizler (kutu "▯" olarak çıkıyordu).
@@ -145,6 +156,7 @@ export const SEED_RECIPES = [
       { type: 'text', name: 'Meta_Text', bind: 'copy.meta|brand.sector', upper: true, size: 22, tracking: 160, color: 'muted', align: 'right', anchor: { sameTopAs: 'Brand_Logo' }, optional: true, dropIfOverlaps: 'Brand_Logo', group: 'Header' },
       { type: 'rect', name: 'Accent_Bar', x: 'left', w: 120, h: 9, color: 'accentOnBg', anchor: { after: ['Brand_Logo'], gap: { default: 54, story: 70 } }, group: 'Header' },
       { type: 'text', name: 'Eyebrow_Text', bind: 'copy.eyebrow', upper: true, size: 26, bold: true, tracking: 200, color: 'accentOnBg', anchor: { after: ['Accent_Bar'], gap: { default: 64, story: 120 } }, group: 'Copy' },
+      { type: 'arrow', name: 'Route_Arrow', sameTopAs: 'Eyebrow_Text', w: 170, dy: 12, thickness: 9, color: 'accentOnBg', align: 'right', group: 'Copy' },
       { type: 'text', name: 'Headline_H1', bind: 'copy.title:first', size: { default: 136, linkedin: 108 }, bold: true, color: 'fg', leadingMul: 1.0, maxWidth: 1, anchor: { after: ['Eyebrow_Text', 'Accent_Bar'], gap: 26 }, group: 'Copy' },
       { type: 'text', name: 'Headline_H1b', bind: 'copy.title:rest', size: { default: 136, linkedin: 108 }, bold: true, color: 'accentOnBg', leadingMul: 1.0, maxWidth: 1, anchor: { after: ['Headline_H1'], gap: 6 }, group: 'Copy' },
       { type: 'text', name: 'Subcopy_Body', bind: 'copy.desc', size: 36, color: 'fgSoft', leadingMul: 1.36, maxWidth: { default: 0.82, linkedin: 1 }, anchor: { after: ['Headline_H1b', 'Headline_H1', 'Eyebrow_Text'], gap: 44 }, group: 'Copy' },
@@ -192,6 +204,26 @@ export const SEED_RECIPES = [
       { type: 'text', name: 'CTA_Text', bind: 'copy.cta', upper: true, size: 30, bold: true, tracking: 160, color: 'onAccent', inset: 68, anchor: { after: ['Subcopy_Body', 'Accent_Bar', 'Headline_H1'], gap: 60 + 28 }, group: 'CTA' },
       { type: 'behindText', name: 'CTA_Button', of: 'CTA_Text', padX: 44, padY: 28, radius: 0, color: 'accentOnBg', minW: 320, group: 'CTA' },
       { type: 'text', name: 'URL_Text', bind: 'brand.url', size: 24, tracking: 60, color: 'muted', inset: 24, anchor: { bottom: true, offset: 0 }, optional: true, group: 'Footer' }
+    ]
+  },
+  {
+    id: 'foto-hero',
+    manual: true,
+    name: 'Fotoğraflı Hero',
+    description: 'Tam kadraj fotoğraf, alttan koyulaşan perde (gradient) ve iri başlık. Şehir/rota/destinasyon gibi fotoğraf taşıyan duyurular için; fotoğraf yoksa marka renkli zemin kullanır.',
+    items: [
+      { type: 'bg', name: 'BG_Base', color: 'bg' },
+      { type: 'image', name: 'Visual_Hero', when: 'hero', optional: true, group: 'Visual' },
+      { type: 'gradient', name: 'Visual_Scrim', when: 'hero', color: 'bg', angle: 90, opacityStart: 0, opacityEnd: 88, group: 'Visual' },
+      { type: 'rect', name: 'Visual_Top_Scrim', when: 'hero', x: 'left', w: 'full', h: 220, color: 'bg', opacity: 45, anchor: { top: 0 }, group: 'Visual' },
+      { type: 'ellipse', name: 'Visual_Orb_A', when: '!hero', cx: { default: 0.8, story: 0.8, linkedin: 0.8 }, cy: { default: 0.3, story: 0.3, linkedin: 0.5 }, d: { default: 0.8, linkedin: 1 }, color: 'accentOnBg', opacity: 12, group: 'Visual' },
+      { type: 'text', name: 'Brand_Logo', bind: 'brand.name', upper: true, size: 30, bold: true, tracking: 220, color: 'fg', anchor: { topFrac: TOP }, group: 'Header' },
+      { type: 'text', name: 'Eyebrow_Text', bind: 'copy.eyebrow', upper: true, size: 26, bold: true, tracking: 200, color: 'accentOnBg', anchor: { topFrac: { default: 0.44, story: 0.44, linkedin: 0.34 } }, group: 'Copy' },
+      { type: 'text', name: 'Headline_H1', bind: 'copy.title', size: { default: 112, linkedin: 88 }, bold: true, color: 'fg', leadingMul: 1.02, maxWidth: 1, anchor: { after: ['Eyebrow_Text'], gap: 26 }, group: 'Copy' },
+      { type: 'text', name: 'Subcopy_Body', bind: 'copy.desc', size: 34, color: 'fgSoft', leadingMul: 1.36, maxWidth: { default: 0.84, linkedin: 0.9 }, anchor: { after: ['Headline_H1'], gap: 34 }, group: 'Copy' },
+      { type: 'text', name: 'CTA_Text', bind: 'copy.cta', upper: true, size: 28, bold: true, tracking: 160, color: 'onAccent', inset: 40, anchor: { after: ['Subcopy_Body', 'Headline_H1'], gap: 48 + 26 }, group: 'CTA' },
+      { type: 'behindText', name: 'CTA_Button', of: 'CTA_Text', padX: 40, padY: 26, radius: 'full', color: 'accentOnBg', minW: 300, group: 'CTA' },
+      { type: 'text', name: 'URL_Text', bind: 'brand.url', size: 24, tracking: 60, color: 'fgSoft', anchor: { bottom: true, offset: 0 }, optional: true, group: 'Footer' }
     ]
   }
 ];
@@ -265,7 +297,7 @@ export function compileRecipe(recipe, ctx) {
 function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPath, heroImagePath }, scale = 1) {
   const T = colorTokens(brand, { paper: recipe.paper });
   const M = metrics(format);
-  const font = brand.font_family && /^[\w .-]{2,60}$/.test(brand.font_family) ? brand.font_family : undefined;
+  const fonts = brandFonts(brand);
   const ops = [{ op: 'doc.create', args: { name: `${brand.name}_${format}`.slice(0, 100), width: M.w, height: M.h, resolution: 72 } }];
   const emitted = new Map(); // ad -> {estimated bounds}
   const groups = new Map();
@@ -292,6 +324,25 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
       continue;
     }
 
+    if (item.type === 'gradient') {
+      ops.push({ op: 'shape.gradient', optional: true, args: { name: item.name, color: col(item.color), angle: pick(item.angle, format) ?? 90, opacityStart: item.opacityStart ?? 0, opacityEnd: item.opacityEnd ?? 80 } });
+      emitted.set(item.name, { left: 0, top: 0, right: M.w, bottom: M.h });
+      addGroup(item);
+      continue;
+    }
+
+    if (item.type === 'arrow') {
+      const ref = emitted.get(item.sameTopAs);
+      if (!ref) continue;
+      const w = pick(item.w, format);
+      const x = item.align === 'right' ? M.w - M.mx - w : M.mx;
+      const y = Math.round(ref.top + (item.dy || 0));
+      ops.push({ op: 'shape.arrow', optional: true, args: { name: item.name, x, y, w, thickness: item.thickness || 8, color: col(item.color), ...(item.direction ? { direction: item.direction } : {}) } });
+      emitted.set(item.name, { left: x, top: y - w * 0.2, right: x + w, bottom: y + w * 0.2 });
+      addGroup(item);
+      continue;
+    }
+
     if (item.type === 'ellipse') {
       const d = Math.round(pick(item.d, format) * Math.min(M.w, M.h));
       const cx = Math.round(pick(item.cx, format) * M.w), cy = Math.round(pick(item.cy, format) * M.h);
@@ -313,13 +364,34 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
       else if (a.after) {
         const ref = firstExisting(a.after);
         if (!ref) { notes.push(`${item.name}: bağlı katman yok, atlandı`); continue; }
-        args.afterLayer = ref; args.gap = Math.round((pick(a.gap, format) || 0) * (item.group === 'Copy' || item.group === 'CTA' ? scale : 1)); top = emitted.get(ref).bottom + args.gap;
+        const gapPx = Math.round((pick(a.gap, format) || 0) * (item.group === 'Copy' || item.group === 'CTA' ? scale : 1));
+        if (!emitted.get(ref).image) { args.afterLayer = ref; args.gap = gapPx; }
+        top = emitted.get(ref).bottom + gapPx;
       } else top = a.top ?? 0;
       if (args.afterLayer === undefined) args.y = Math.round(top);
       ops.push({ op: 'shape.rect', args });
       emitted.set(item.name, { left: x, top, right: x + w, bottom: top + h });
       addGroup(item);
       continue;
+    }
+
+    if (item.type === 'text' && item.name === 'Brand_Logo' && brand.logos && (brand.logos.onDark || brand.logos.onLight)) {
+      const bgOfLogo = (item.color === 'onAccentRaw') ? T.accentRaw : (item.color === 'onAccent') ? T.accentOnBg : T.bg;
+      const dark = luminance(bgOfLogo) < 0.4;
+      const logo = (dark ? brand.logos.onDark : brand.logos.onLight) || brand.logos.onDark || brand.logos.onLight;
+      if (logo && logo.size && logo.size.w > 0 && logo.size.h > 0) {
+        const targetH = Math.round(66 * (pick(item.logoScale, format) ?? 1));
+        const maxW = Math.round(M.contentW * 0.4);
+        let h = targetH, w = Math.round(h * logo.size.w / logo.size.h);
+        if (w > maxW) { w = maxW; h = Math.round(w * logo.size.h / logo.size.w); }
+        const align = item.align || 'left';
+        const x = align === 'center' ? Math.round((M.w - w) / 2) : M.mx;
+        const top = Math.round(pick(item.anchor?.topFrac, format) * M.h);
+        ops.push({ op: 'layer.image', optional: true, args: { name: item.name, path: logo.path, x, y: top, w, h } });
+        emitted.set(item.name, { left: x, top, right: x + w, bottom: top + h, image: true });
+        addGroup(item);
+        continue;
+      }
     }
 
     if (item.type === 'text') {
@@ -338,7 +410,7 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
       const a = item.anchor || {};
       const args = {
         name: item.name, contents: lines.join('\n').slice(0, 600), x, size, color: col(item.color),
-        ...(font ? { font } : {}), ...(item.bold ? { weight: 'bold' } : {}),
+        ...((isHeadingItem(item.name) ? fonts.heading : fonts.body) ? { font: isHeadingItem(item.name) ? fonts.heading : fonts.body } : {}), ...(item.bold ? { weight: 'bold' } : {}),
         ...(item.tracking ? { tracking: item.tracking } : {}), ...(item.leadingMul ? { leading: box.lead } : {}),
         ...(align !== 'left' ? { align } : {})
       };
@@ -355,7 +427,11 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
       } else if (a.after) {
         const ref = firstExisting(a.after);
         if (!ref) { notes.push(`${item.name}: bağlı katman yok`); top = M.safeTop; }
-        else { args.afterLayer = ref; args.gap = Math.round((pick(a.gap, format) || 0) * sc); top = emitted.get(ref).bottom + args.gap; }
+        else {
+          const gapPx = Math.round((pick(a.gap, format) || 0) * sc);
+          if (!emitted.get(ref).image) { args.afterLayer = ref; args.gap = gapPx; }
+          top = emitted.get(ref).bottom + gapPx;
+        }
       } else if (a.afterBlock) {
         const ref = emitted.get(a.afterBlock);
         top = (ref ? ref.bottom : M.safeTop) + (a.gap || 0);

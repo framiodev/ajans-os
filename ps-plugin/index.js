@@ -3,7 +3,7 @@ const photoshop = require('photoshop');
 const uxp = require('uxp');
 const { app, core, action, constants } = photoshop;
 const fsx = uxp.storage.localFileSystem;
-const PLUGIN_VERSION = '0.2.1';
+const PLUGIN_VERSION = '0.3.0';
 // Photoshop 28'de app.version boş gelebiliyor; sırayla farklı kaynaklardan oku.
 function psVersion() {
   try {
@@ -85,50 +85,6 @@ function resolveFont(name, weight) {
   }
   return { ps: undefined, found: false, weightFound: undefined };
 }
-function modal(name, fn) { return core.executeAsModal(fn, { commandName: name }); }
-function activeDoc() { const d = app.activeDocument; if (!d) throw new Error('Açık belge yok'); return d; }
-// UXP, verilen yolu kendisi yüzde-kodlar; önceden kodlarsak "Ali%20Kaan" -> "Ali%2520Kaan" olur.
-// Bu yüzden önce ham yolu dene, olmazsa kodlu biçime düş.
-function toUrls(p) {
-  const path = String(p).replace(/\\/g, '/').replace(/^\/+/, '');
-  const raw = 'file:/' + path;
-  const enc = 'file:/' + encodeURI(path);
-  return raw === enc ? [raw] : [raw, enc];
-}
-async function entryAt(p, create) {
-  let lastErr;
-  for (const url of toUrls(p)) {
-    try {
-      return create ? await fsx.createEntryWithUrl(url, { overwrite: true }) : await fsx.getEntryWithUrl(url);
-    } catch (e) { lastErr = e; }
-  }
-  throw lastErr;
-}
-
-function kindOf(layer) {
-  const k = String(layer.kind || '').toLowerCase();
-  if (k.indexOf('text') >= 0) return 'text';
-  if (k.indexOf('group') >= 0) return 'group';
-  if (k.indexOf('smart') >= 0) return 'smartObject';
-  if (k.indexOf('solid') >= 0) return 'solid';
-  return k.indexOf('pixel') >= 0 ? 'pixel' : (k || 'other');
-}
-
-function fontList() { try { return Array.from(app.fonts || []); } catch (e) { return []; } }
-function resolveFont(name) {
-  if (!name) return { ps: undefined, found: undefined };
-  const fonts = fontList();
-  if (!fonts.length) return { ps: name, found: undefined };
-  const exact = fonts.find(f => f.postScriptName === name);
-  if (exact) return { ps: exact.postScriptName, found: true };
-  const fam = fonts.filter(f => f.family === name || f.name === name);
-  if (fam.length) {
-    const reg = fam.find(f => /regular|roman|normal/i.test(f.style || '')) || fam[0];
-    return { ps: reg.postScriptName, found: true };
-  }
-  return { ps: undefined, found: false };
-}
-
 function walk(layers) {
   return Array.from(layers).map(l => {
     const kind = kindOf(l);
@@ -292,6 +248,91 @@ const handlers = {
       shape.move(findLayer(a.textLayer), constants.ElementPlacement.PLACEAFTER);
     });
     return { name: a.name, bounds: boundsOf(findLayer(a.name)), warnings };
+  },
+
+  // Tüm kanvası kaplayan, saydamlığı değişen renk geçişi (okunurluk için karartma / scrim).
+  // angle: 90 = alttan üste. UNVERIFIED: yön eşlemesi PS 28'de yetenek testiyle doğrulanır.
+  async 'shape.gradient'(a) {
+    const c = rgb(a.color);
+    const o0 = a.opacityStart === undefined ? 0 : a.opacityStart, o1 = a.opacityEnd === undefined ? 80 : a.opacityEnd;
+    const stop = (loc, op) => ({ _obj: 'transferSpec', opacity: { _unit: 'percentUnit', _value: op }, location: Math.round(loc * 40.96), midpoint: 50 });
+    const col = loc => ({ _obj: 'colorStop', color: { _obj: 'RGBColor', red: c.red, grain: c.green, blue: c.blue }, type: { _enum: 'colorStopType', _value: 'userStop' }, location: Math.round(loc * 40.96), midpoint: 50 });
+    await modal('AjansOS: geçiş', async () => {
+      await action.batchPlay([{
+        _obj: 'make', _target: [{ _ref: 'contentLayer' }],
+        using: { _obj: 'contentLayer', type: {
+          _obj: 'gradientLayer', angle: { _unit: 'angleUnit', _value: a.angle === undefined ? 90 : a.angle },
+          type: { _enum: 'gradientType', _value: 'linear' },
+          gradient: { _obj: 'gradientClassEvent', name: 'AjansOS', gradientForm: { _enum: 'gradientForm', _value: 'customStops' }, interfaceIconFrameDimmed: 4096,
+            colors: [col(0), col(100)], transparency: [stop(0, o0), stop(100, o1)] } } },
+        _options: { dialogOptions: 'dontDisplay' }
+      }], {});
+      activeDoc().activeLayers[0].name = a.name;
+    });
+    return { name: a.name, bounds: boundsOf(findLayer(a.name)), warnings: [] };
+  },
+
+  // Ok: gövde + iki kanat (döndürülmüş ince dikdörtgenler), tek grupta. UNVERIFIED: layer.rotate PS 28'de.
+  async 'shape.arrow'(a) {
+    const warnings = [];
+    const t = a.thickness || 8, len = a.w;
+    const dir = a.direction === 'left' ? -1 : 1;
+    const tipX = dir === 1 ? a.x + len : a.x;
+    await makeShape('rect', { name: a.name + '_Govde', x: a.x, y: a.y, w: len, h: t, color: a.color, radius: Math.round(t / 2) }, warnings);
+    const wing = Math.round(len * 0.3);
+    for (const [suffix, ang] of [['_KanatA', 40], ['_KanatB', -40]]) {
+      await makeShape('rect', { name: a.name + suffix, x: tipX - wing + (dir === 1 ? 0 : 0), y: a.y + t / 2 - t / 2, w: wing, h: t, color: a.color, radius: Math.round(t / 2) }, warnings);
+      await modal('AjansOS: ok kanadı', async () => {
+        const l = findLayer(a.name + suffix);
+        const b = boundsOf(l);
+        // kanadın ucu okun ucunda kalsın: dönme merkezi uç noktası
+        const pivot = dir === 1 ? constants.AnchorPosition.MIDDLERIGHT : constants.AnchorPosition.MIDDLELEFT;
+        await l.rotate(dir === 1 ? ang : -ang, pivot);
+      });
+    }
+    await modal('AjansOS: ok grubu', async () => {
+      const doc = activeDoc();
+      const layers = ['_Govde', '_KanatA', '_KanatB'].map(sfx => findLayer(a.name + sfx));
+      const g = await doc.createLayerGroup({ name: a.name, fromLayers: layers });
+      if (g) g.name = a.name;
+    });
+    return { name: a.name, bounds: boundsOf(findLayer(a.name)), warnings };
+  },
+
+  // Katmana gölge (katman stili, tahribatsız). UNVERIFIED: layerEffects.dropShadow tanımı.
+  async 'layer.shadow'(a) {
+    const c = rgb(a.color || '#000000');
+    const target = findLayer(a.name);
+    await modal('AjansOS: gölge', async () => {
+      await action.batchPlay([{
+        _obj: 'select', _target: [{ _ref: 'layer', _id: target.id }], makeVisible: false, _options: { dialogOptions: 'dontDisplay' }
+      }, {
+        _obj: 'set', _target: [{ _ref: 'property', _property: 'layerEffects' }, { _ref: 'layer', _enum: 'ordinal', _value: 'targetEnum' }],
+        to: { _obj: 'layerEffects', scale: { _unit: 'percentUnit', _value: 100 },
+          dropShadow: { _obj: 'dropShadow', enabled: true, present: true, showInDialog: true,
+            mode: { _enum: 'blendMode', _value: 'multiply' }, color: { _obj: 'RGBColor', red: c.red, grain: c.green, blue: c.blue },
+            opacity: { _unit: 'percentUnit', _value: a.opacity === undefined ? 45 : a.opacity }, useGlobalAngle: false,
+            localLightingAngle: { _unit: 'angleUnit', _value: a.angle === undefined ? 120 : a.angle },
+            distance: px(a.distance === undefined ? 12 : a.distance), chokeMatte: px(0), blur: px(a.blur === undefined ? 24 : a.blur),
+            noise: { _unit: 'percentUnit', _value: 0 }, antiAlias: false, transferSpec: { _obj: 'shapeCurveType', name: 'Linear' } } },
+        _options: { dialogOptions: 'dontDisplay' }
+      }], {});
+    });
+    return { name: a.name, warnings: [] };
+  },
+
+  // Konuyu seçip katmana maske yapar (arka planı gizler). UNVERIFIED: autoCutout PS 28'de batchPlay ile.
+  async 'mask.subject'(a) {
+    const target = findLayer(a.name);
+    await modal('AjansOS: konu maskesi', async () => {
+      await action.batchPlay([
+        { _obj: 'select', _target: [{ _ref: 'layer', _id: target.id }], makeVisible: false, _options: { dialogOptions: 'dontDisplay' } },
+        { _obj: 'autoCutout', sampleAllLayers: false, _options: { dialogOptions: 'dontDisplay' } },
+        { _obj: 'make', new: { _class: 'channel' }, at: { _ref: 'channel', _enum: 'channel', _value: 'mask' }, using: { _enum: 'userMaskEnabled', _value: 'revealSelection' }, _options: { dialogOptions: 'dontDisplay' } },
+        { _obj: 'set', _target: [{ _ref: 'channel', _property: 'selection' }], to: { _enum: 'ordinal', _value: 'none' }, _options: { dialogOptions: 'dontDisplay' } }
+      ], {});
+    });
+    return { name: a.name, warnings: [] };
   },
 
   async 'layer.image'(a) {

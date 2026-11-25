@@ -157,3 +157,21 @@ test('otomatik seçim eski üç tarifle sınırlı kalır (marka sürekliliği b
   }
   assert.equal(chooseRecipe({ id: 'vega' }, 'sehir-vurgu').id, 'sehir-vurgu');
 });
+
+test('marka kiti: logo görseli Brand_Logo metninin yerine geçer, sonraki katmanlar mutlak yerleşir; fontlar başlık/gövde ayrılır', () => {
+  const b = { ...brand, font_family: 'Montserrat / Inter', logos: { onDark: { path: '/tmp/logo_light.png', size: { w: 600, h: 200 } }, onLight: null } };
+  const ops = compile(SEED_RECIPES[0], BRIEFS[0], 'post', {});
+  assert.ok(ops.some(o => o.op === 'layer.text' && o.args.name === 'Brand_Logo'));
+  const withLogo = compileRecipe(SEED_RECIPES[0], { brand: b, copy: BRIEFS[0], format: 'post', psdPath: '/tmp/a.psd', pngPath: '/tmp/a.png' });
+  const logoOp = withLogo.find(o => o.args.name === 'Brand_Logo');
+  assert.equal(logoOp.op, 'layer.image');
+  assert.equal(Math.round(logoOp.args.w / logoOp.args.h), 3);
+  assert.ok(OPS['layer.image'](logoOp.args));
+  const rule = withLogo.find(o => o.args.name === 'Header_Rule');
+  assert.equal(rule.args.afterLayer, undefined);
+  assert.ok(Number.isFinite(rule.args.y));
+  const head = withLogo.find(o => o.args.name === 'Headline_H1').args;
+  const body = withLogo.find(o => o.args.name === 'Subcopy_Body').args;
+  assert.equal(head.font, 'Montserrat');
+  assert.equal(body.font, 'Inter');
+});
