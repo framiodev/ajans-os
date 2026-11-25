@@ -1,3 +1,4 @@
+import http from 'node:http';
 import express from 'express';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -10,6 +11,12 @@ import { generatePostPsd, generateProEditorialJsx, revisePhotoshopLayer } from '
 import { generateVectorPostAi } from '../mcp-servers/adobe-mcp/illustratorBridge.mjs';
 import { localOnly, validatedPath, isSecretKey, maskSecret } from './security.mjs';
 import { evaluateDesign } from './services/visionQa.mjs';
+import { bridge } from './services/ps/bridge.mjs';
+import { attachWebSocket } from './services/ps/wsServer.mjs';
+import { lintSnapshot } from './services/ps/lint.mjs';
+import { buildPostOps } from './services/ps/layout.mjs';
+import { parseRevision, pickLayer } from './services/ps/revise.mjs';
+import { safeFormat, safeSegment } from './security.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.AJANSOS_DATA_DIR || path.resolve(__dirname, '../storage');
@@ -336,6 +343,73 @@ app.post('/api/qa/evaluate', async (req, res) => {
   }
 });
 
+
+// ---- Photoshop UXP köprüsü ----
+function getBridgeToken() {
+  const row = db.prepare("SELECT value FROM settings WHERE key = 'ps_bridge_token'").get();
+  if (row && row.value) return row.value;
+  const t = crypto.randomBytes(16).toString('hex');
+  db.prepare("INSERT INTO settings (key, value) VALUES ('ps_bridge_token', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(t);
+  return t;
+}
+const BRIDGE_TOKEN = getBridgeToken();
+
+app.get('/api/ps/status', (_req, res) => res.json(bridge.status()));
+app.get('/api/ps/info', (_req, res) => res.json({ token: BRIDGE_TOKEN, port: Number(PORT) }));
+
+async function snapshotAndLint(format) {
+  const snapshot = await bridge.request('doc.snapshot', {});
+  return { snapshot, lint: lintSnapshot(snapshot, { format }) };
+}
+
+app.post('/api/ps/snapshot', async (req, res) => {
+  try {
+    res.json({ ok: true, ...(await snapshotAndLint(safeFormat(req.body?.format))) });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message });
+  }
+});
+
+app.post('/api/ps/generate', async (req, res) => {
+  try {
+    const { brand_id, copy, format } = req.body || {};
+    const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
+    if (!brand) return res.status(404).json({ ok: false, error: 'Marka bulunamadi' });
+    const fmt = safeFormat(format);
+    fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+    const base = `${safeSegment(brand.id, 'brand')}_${fmt}_${Date.now()}`;
+    const psdPath = path.join(OUTPUT_DIR, `${base}.psd`);
+    const pngPath = path.join(OUTPUT_DIR, `${base}.png`);
+    const ops = buildPostOps({ brand, copy: copy || {}, format: fmt, psdPath, pngPath });
+    await bridge.runOps(ops, { timeoutMs: 60000 });
+    const { snapshot, lint } = await snapshotAndLint(fmt);
+    res.json({ ok: true, psdPath, pngPath, lint, layers: snapshot.layers });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message, step: err.step ?? null });
+  }
+});
+
+app.post('/api/ps/revise', async (req, res) => {
+  try {
+    const { instruction, psdPath, format } = req.body || {};
+    const fmt = safeFormat(format);
+    const safePsd = psdPath ? validatedPath(psdPath, [OUTPUT_DIR], new Set(['.psd'])) : null;
+    if (psdPath && !safePsd) return res.status(400).json({ ok: false, error: 'Gecersiz PSD yolu (yalnizca cikti klasoru)' });
+    const rev = parseRevision(instruction);
+    if (rev.delta === null) return res.status(400).json({ ok: false, error: 'Revize anlaşılamadı: "büyüt" veya "küçült" belirtin (örn. "başlığı 8 punto büyüt").' });
+    const { snapshot } = await snapshotAndLint(fmt);
+    const layer = pickLayer(snapshot, rev.kind);
+    if (!layer || !layer.text) return res.status(404).json({ ok: false, error: `Hedef metin katmanı bulunamadı (${rev.kind}). Katmanlar: ${snapshot.layers.map(l => l.name).join(', ')}` });
+    const target = Math.max(8, Math.round(layer.text.size + rev.delta));
+    const change = await bridge.request('layer.setTextSize', { name: layer.name, size: target });
+    if (safePsd) await bridge.request('doc.save', { psdPath: safePsd, pngPath: safePsd.replace(/\.psd$/i, '.png') }, { timeoutMs: 60000 });
+    const after = await snapshotAndLint(fmt);
+    res.json({ ok: true, layer: layer.name, sizeBefore: change.before, sizeAfter: change.after, lint: after.lint });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message });
+  }
+});
+
 if (fs.existsSync(FRONTEND_DIST)) {
   app.use(express.static(FRONTEND_DIST));
   app.get('/{*splat}', (_req, res) => {
@@ -343,6 +417,16 @@ if (fs.existsSync(FRONTEND_DIST)) {
   });
 }
 
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`AjansOS Backend calisiyor: http://127.0.0.1:${PORT}`);
-});
+function verifyBridgeUpgrade(req, url) {
+  return /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(req.headers.host || '') && url.searchParams.get('token') === BRIDGE_TOKEN;
+}
+
+// UXP 'localhost' adresini IPv4 veya IPv6'ya çözebilir; ikisini de yalnızca yerel arayüzde dinle.
+for (const host of ['127.0.0.1', '::1']) {
+  const server = http.createServer(app);
+  attachWebSocket(server, { path: '/ps', verify: verifyBridgeUpgrade, onConnection: c => bridge.attach(c) });
+  server.on('error', err => { if (host === '127.0.0.1') throw err; });
+  server.listen(PORT, host, () => {
+    if (host === '127.0.0.1') console.log(`AjansOS Backend calisiyor: http://127.0.0.1:${PORT}`);
+  });
+}
