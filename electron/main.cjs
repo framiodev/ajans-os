@@ -3,6 +3,7 @@ const { autoUpdater } = require('electron-updater');
 const { createUpdater } = require('./updater.cjs');
 const path = require('node:path');
 const fs = require('node:fs');
+const http = require('node:http');
 const { pathToFileURL } = require('node:url');
 
 let mainWindow = null;
@@ -28,19 +29,27 @@ function logLine(msg) {
   } catch {}
 }
 
+// Node'un http modülüyle denetle (fetch'e göre proxy/AV kaynaklı takılmalardan etkilenmez).
+function probe(url) {
+  return new Promise((resolve) => {
+    const req = http.get(url, { timeout: 2500, agent: false }, (res) => {
+      let body = '';
+      res.on('data', (c) => { if (body.length < 200) body += c; });
+      res.on('end', () => resolve(res.statusCode === 200 ? { ok: true } : { ok: false, detail: `HTTP ${res.statusCode}: ${body.slice(0, 120)}` }));
+    });
+    req.on('timeout', () => req.destroy(new Error('zaman aşımı')));
+    req.on('error', (e) => resolve({ ok: false, detail: [e.code, e.syscall, e.address, e.message].filter(Boolean).join(' ') }));
+  });
+}
+
 async function waitForServer(url, retries = 30) {
-  let last = 'bağlantı kurulamadı';
+  let last = { ok: false, detail: 'bağlantı kurulamadı' };
   for (let i = 0; i < retries; i++) {
-    try {
-      const res = await fetch(url);
-      if (res.ok) return { ok: true };
-      last = `HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`;
-    } catch (e) {
-      last = e.cause?.code || e.message;
-    }
+    last = await probe(url);
+    if (last.ok) return last;
     await new Promise(r => setTimeout(r, 300));
   }
-  return { ok: false, detail: last };
+  return last;
 }
 
 async function startBackend() {
@@ -68,10 +77,8 @@ async function createWindow() {
   }
   const ready = await waitForServer(`${APP_ORIGIN}/api/health`);
   if (!ready.ok) {
-    logLine(`sağlık kontrolü başarısız: ${ready.detail}`);
-    dialog.showErrorBox('AjansOS başlatılamadı', `Yerel sunucu beklenen yanıtı vermedi.\n\nTeknik ayrıntı: ${ready.detail}\nKayıt: ${path.join(app.getPath('userData'), 'ajansos.log')}`);
-    app.quit();
-    return;
+    // Sunucu dinliyor (serverReady çözüldü); sağlık kontrolü takıldıysa yine de arayüzü açmayı dene.
+    logLine(`sağlık kontrolü başarısız, yine de açılıyor: ${ready.detail}`);
   }
 
   mainWindow = new BrowserWindow({
@@ -99,7 +106,14 @@ async function createWindow() {
     if (!url.startsWith(APP_ORIGIN)) event.preventDefault();
   });
 
-  await mainWindow.loadURL(APP_ORIGIN);
+  try {
+    await mainWindow.loadURL(APP_ORIGIN);
+  } catch (e) {
+    logLine(`arayüz yüklenemedi: ${e.code || ''} ${e.message}`);
+    dialog.showErrorBox('AjansOS başlatılamadı', `Arayüz yüklenemedi.\n\nSağlık kontrolü: ${ready.ok ? 'tamam' : ready.detail}\nArayüz: ${e.code || ''} ${e.message}\nKayıt: ${path.join(app.getPath('userData'), 'ajansos.log')}`);
+    app.quit();
+    return;
+  }
 
   // GitHub Releases üzerinden uygulama içi güncelleme (açılışta + 4 saatte bir).
   const updater = createUpdater({
