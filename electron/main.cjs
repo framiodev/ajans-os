@@ -2,6 +2,7 @@ const { app, BrowserWindow, shell, dialog } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const { createUpdater } = require('./updater.cjs');
 const path = require('node:path');
+const fs = require('node:fs');
 const { pathToFileURL } = require('node:url');
 
 let mainWindow = null;
@@ -20,35 +21,55 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
+function logLine(msg) {
+  try {
+    const file = path.join(app.getPath('userData'), 'ajansos.log');
+    fs.appendFileSync(file, `${new Date().toISOString()} ${msg}\n`);
+  } catch {}
+}
+
 async function waitForServer(url, retries = 30) {
+  let last = 'bağlantı kurulamadı';
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fetch(url);
-      if (res.ok) return true;
-    } catch {}
+      if (res.ok) return { ok: true };
+      last = `HTTP ${res.status}: ${(await res.text()).slice(0, 120)}`;
+    } catch (e) {
+      last = e.cause?.code || e.message;
+    }
     await new Promise(r => setTimeout(r, 300));
   }
-  return false;
+  return { ok: false, detail: last };
 }
 
 async function startBackend() {
   process.env.PORT = String(PORT);
   process.env.AJANSOS_DATA_DIR = path.join(app.getPath('userData'), 'AjansOSData');
   const serverPath = path.join(__dirname, '..', 'backend', 'server.mjs');
-  await import(pathToFileURL(serverPath).href);
+  const mod = await import(pathToFileURL(serverPath).href);
+  await mod.serverReady; // port dolu/yasaklıysa gerçek hata burada fırlar
 }
 
 async function createWindow() {
+  logLine(`başlatılıyor v${app.getVersion()} (${app.isPackaged ? 'kurulu' : 'geliştirme'})`);
   try {
     await startBackend();
   } catch (e) {
-    dialog.showErrorBox('AjansOS başlatılamadı', `Sunucu açılamadı (port ${PORT} dolu olabilir): ${e.message}`);
+    logLine(`sunucu hatası: ${e.code || ''} ${e.message}`);
+    const hint = e.code === 'EADDRINUSE'
+      ? `Port ${PORT} başka bir uygulama tarafından kullanılıyor. AjansOS'un eski bir kopyası arka planda açık olabilir; Görev Yöneticisi'nden kapatıp yeniden deneyin.`
+      : e.code === 'EACCES'
+        ? `Windows port ${PORT}'ü kullanıma kapatmış (ayrılmış port aralığı).`
+        : e.message;
+    dialog.showErrorBox('AjansOS başlatılamadı', `${hint}\n\nTeknik ayrıntı: ${e.code || ''} ${e.message}\nKayıt: ${path.join(app.getPath('userData'), 'ajansos.log')}`);
     app.quit();
     return;
   }
   const ready = await waitForServer(`${APP_ORIGIN}/api/health`);
-  if (!ready) {
-    dialog.showErrorBox('AjansOS başlatılamadı', 'Yerel sunucu yanıt vermedi. Uygulamayı kapatıp yeniden açın.');
+  if (!ready.ok) {
+    logLine(`sağlık kontrolü başarısız: ${ready.detail}`);
+    dialog.showErrorBox('AjansOS başlatılamadı', `Yerel sunucu beklenen yanıtı vermedi.\n\nTeknik ayrıntı: ${ready.detail}\nKayıt: ${path.join(app.getPath('userData'), 'ajansos.log')}`);
     app.quit();
     return;
   }
