@@ -153,6 +153,52 @@ export default function App() {
     return () => { alive = false; clearInterval(t); clearInterval(t2); };
   }, []);
 
+  type VaultAsset = { name: string; fullPath: string; size: number };
+  type VaultKit = { fontHeading: string; fontBody: string; colors: Record<string, string>; tone: string; forbidden: string[]; notes: string };
+  const [vault, setVault] = useState<{ dir: string; kit: VaultKit; assets: Record<string, VaultAsset[]>; warnings: string[] } | null>(null);
+  const [kitDraft, setKitDraft] = useState<VaultKit | null>(null);
+  const [uploadFolder, setUploadFolder] = useState('photos');
+
+  const loadVault = async (id: string) => {
+    try {
+      const r = await fetch(`/api/brands/${id}/vault`);
+      if (!r.ok) { setVault(null); setKitDraft(null); return; }
+      const j = await r.json();
+      setVault(j);
+      setKitDraft(j.kit);
+    } catch { setVault(null); setKitDraft(null); }
+  };
+  const uploadAssets = async (files: FileList | null) => {
+    if (!files || !files.length) return;
+    let ok = 0; const errs: string[] = [];
+    for (const f of Array.from(files)) {
+      try {
+        const r = await fetch(`/api/brands/${activeBrandId}/assets/${uploadFolder}?name=${encodeURIComponent(f.name)}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: f });
+        const j = await r.json();
+        if (j.ok) ok++; else errs.push(`${f.name}: ${j.error}`);
+      } catch { errs.push(`${f.name}: yüklenemedi`); }
+    }
+    notify(`${ok} dosya eklendi${errs.length ? ' — ' + errs.join('; ') : ''}`);
+    loadVault(activeBrandId);
+  };
+  const removeAsset = async (folder: string, name: string) => {
+    await fetch(`/api/brands/${activeBrandId}/assets/${folder}/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    loadVault(activeBrandId);
+  };
+  const saveKit = async () => {
+    if (!kitDraft) return;
+    const r = await fetch(`/api/brands/${activeBrandId}/kit`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(kitDraft) });
+    const j = await r.json();
+    notify(j.ok ? 'Marka kimliği kaydedildi' : 'Kaydedilemedi');
+    loadVault(activeBrandId);
+  };
+  const openVaultFolder = async () => {
+    const r = await fetch(`/api/brands/${activeBrandId}/open-folder`, { method: 'POST' });
+    const j = await r.json();
+    if (!j.ok) notify(`Klasör: ${j.dir}`);
+  };
+  useEffect(() => { if (view === 'brands' && activeBrandId) loadVault(activeBrandId); }, [view, activeBrandId]);
+
   const runSelfTest = async () => {
     setSelfTest({ running: true });
     try {
@@ -905,6 +951,71 @@ export default function App() {
                 </div>
               ))}
             </div>
+
+            {/* Marka klasörü (Brand Vault) */}
+            {vault && kitDraft && (
+              <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-4 text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold">{activeBrand.name} — Marka Klasörü ve Kimlik</h3>
+                  <button onClick={openVaultFolder} className="px-3 py-1.5 rounded-lg border border-zinc-700 hover:bg-zinc-800 cursor-pointer">Klasörü Aç</button>
+                </div>
+                <div className="font-mono text-zinc-500 break-all">{vault.dir}</div>
+                {vault.warnings.length > 0 && (
+                  <div className="space-y-1 text-amber-400">{vault.warnings.map((w, i) => <div key={i}>• {w}</div>)}</div>
+                )}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                  <div className="space-y-3">
+                    <div className="font-semibold">Kurumsal kimlik</div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="space-y-1"><span className="text-zinc-400">Başlık fontu</span>
+                        <input value={kitDraft.fontHeading} onChange={e => setKitDraft({ ...kitDraft, fontHeading: e.target.value })} placeholder="Montserrat" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800" /></label>
+                      <label className="space-y-1"><span className="text-zinc-400">Gövde fontu</span>
+                        <input value={kitDraft.fontBody} onChange={e => setKitDraft({ ...kitDraft, fontBody: e.target.value })} placeholder="Inter" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800" /></label>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {(['primary', 'secondary', 'accent'] as const).map(k => (
+                        <label key={k} className="space-y-1"><span className="text-zinc-400">{k === 'primary' ? 'Ana renk' : k === 'secondary' ? 'İkinci renk' : 'Vurgu rengi'}</span>
+                          <div className="flex gap-2 items-center">
+                            <input type="color" value={kitDraft.colors[k] || '#000000'} onChange={e => setKitDraft({ ...kitDraft, colors: { ...kitDraft.colors, [k]: e.target.value } })} className="w-9 h-9 rounded bg-transparent cursor-pointer" />
+                            <span className="font-mono text-zinc-400">{kitDraft.colors[k] || 'marka varsayılanı'}</span>
+                          </div></label>
+                      ))}
+                    </div>
+                    <label className="block space-y-1"><span className="text-zinc-400">Ton</span>
+                      <input value={kitDraft.tone} onChange={e => setKitDraft({ ...kitDraft, tone: e.target.value })} placeholder="Güvenilir, samimi, net" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800" /></label>
+                    <label className="block space-y-1"><span className="text-zinc-400">Yasaklı sözcükler (virgülle)</span>
+                      <input value={kitDraft.forbidden.join(', ')} onChange={e => setKitDraft({ ...kitDraft, forbidden: e.target.value.split(',').map(x => x.trim()).filter(Boolean) })} placeholder="ucuz, kelepir" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800" /></label>
+                    <button onClick={saveKit} className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white font-semibold cursor-pointer">Kimliği Kaydet</button>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="font-semibold">Dosyalar</div>
+                    <div className="flex gap-2 items-center">
+                      <select value={uploadFolder} onChange={e => setUploadFolder(e.target.value)} className="px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800">
+                        <option value="logo">Logo (PNG)</option>
+                        <option value="fonts">Font (TTF/OTF)</option>
+                        <option value="photos">Fotoğraf</option>
+                        <option value="references">Referans</option>
+                      </select>
+                      <input type="file" multiple onChange={e => { uploadAssets(e.target.files); e.currentTarget.value = ''; }} className="text-zinc-400" />
+                    </div>
+                    {(['logo', 'fonts', 'photos', 'references', 'generated'] as const).map(folder => (
+                      <div key={folder} className="space-y-1">
+                        <div className="text-zinc-400">{({ logo: 'Logo', fonts: 'Fontlar', photos: 'Fotoğraflar', references: 'Referanslar', generated: 'Üretilen görseller' } as Record<string, string>)[folder]} ({(vault.assets[folder] || []).length})</div>
+                        <div className="flex flex-wrap gap-2">
+                          {(vault.assets[folder] || []).map(a => (
+                            <div key={a.fullPath} className="group relative border border-zinc-800 rounded bg-zinc-950 p-1 flex items-center gap-2">
+                              {/\.(png|jpe?g|webp)$/i.test(a.name) && <img src={`/api/asset-file?path=${encodeURIComponent(a.fullPath)}`} className="w-10 h-10 object-contain bg-zinc-800 rounded" alt="" />}
+                              <button onClick={() => { if (folder === 'photos' || folder === 'generated') { setSelectedHeroPath(a.fullPath); setView('studio'); notify(`Seçilen görsel stüdyoya yüklendi: ${a.name}`); } }} className="text-left text-[11px] text-zinc-300 max-w-[140px] truncate cursor-pointer" title={a.name}>{a.name}</button>
+                              <button onClick={() => removeAsset(folder, a.name)} className="text-red-400 text-[11px] cursor-pointer" title="Sil">×</button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Marka .md Rehberi & Görsel Klasörü */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

@@ -36,6 +36,17 @@ export function colorTokens(brand, opts = {}) {
   };
 }
 
+// ---------- yazı tipleri ----------
+const FONT_OK = /^[\w .-]{2,60}$/;
+// "Montserrat / Inter" gibi tek alanlı değerden başlık ve gövde fontlarını çıkarır; marka kiti öncelikli.
+export function brandFonts(brand) {
+  const parts = String(brand.font_family || '').split('/').map(x => x.trim()).filter(x => FONT_OK.test(x));
+  const heading = FONT_OK.test(brand.fontHeading || '') ? brand.fontHeading : parts[0];
+  const body = FONT_OK.test(brand.fontBody || '') ? brand.fontBody : (parts[1] || heading);
+  return { heading, body };
+}
+const isHeadingItem = name => /^(Headline|Price|Brand_Logo)/.test(name);
+
 // ---------- metin ----------
 const ARROWS = /[←-⇿➠-➿⬀-⯿»›▶►️]|\p{Extended_Pictographic}/gu;
 // Fontlarda çoğu zaman olmayan ok/emoji karakterlerini temizler (kutu "▯" olarak çıkıyordu).
@@ -266,7 +277,7 @@ export function compileRecipe(recipe, ctx) {
 function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPath, heroImagePath }, scale = 1) {
   const T = colorTokens(brand, { paper: recipe.paper });
   const M = metrics(format);
-  const font = brand.font_family && /^[\w .-]{2,60}$/.test(brand.font_family) ? brand.font_family : undefined;
+  const fonts = brandFonts(brand);
   const ops = [{ op: 'doc.create', args: { name: `${brand.name}_${format}`.slice(0, 100), width: M.w, height: M.h, resolution: 72 } }];
   const emitted = new Map(); // ad -> {estimated bounds}
   const groups = new Map();
@@ -333,13 +344,34 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
       else if (a.after) {
         const ref = firstExisting(a.after);
         if (!ref) { notes.push(`${item.name}: bağlı katman yok, atlandı`); continue; }
-        args.afterLayer = ref; args.gap = Math.round((pick(a.gap, format) || 0) * (item.group === 'Copy' || item.group === 'CTA' ? scale : 1)); top = emitted.get(ref).bottom + args.gap;
+        const gapPx = Math.round((pick(a.gap, format) || 0) * (item.group === 'Copy' || item.group === 'CTA' ? scale : 1));
+        if (!emitted.get(ref).image) { args.afterLayer = ref; args.gap = gapPx; }
+        top = emitted.get(ref).bottom + gapPx;
       } else top = a.top ?? 0;
       if (args.afterLayer === undefined) args.y = Math.round(top);
       ops.push({ op: 'shape.rect', args });
       emitted.set(item.name, { left: x, top, right: x + w, bottom: top + h });
       addGroup(item);
       continue;
+    }
+
+    if (item.type === 'text' && item.name === 'Brand_Logo' && brand.logos && (brand.logos.onDark || brand.logos.onLight)) {
+      const bgOfLogo = (item.color === 'onAccentRaw') ? T.accentRaw : (item.color === 'onAccent') ? T.accentOnBg : T.bg;
+      const dark = luminance(bgOfLogo) < 0.4;
+      const logo = (dark ? brand.logos.onDark : brand.logos.onLight) || brand.logos.onDark || brand.logos.onLight;
+      if (logo && logo.size && logo.size.w > 0 && logo.size.h > 0) {
+        const targetH = Math.round(66 * (pick(item.logoScale, format) ?? 1));
+        const maxW = Math.round(M.contentW * 0.4);
+        let h = targetH, w = Math.round(h * logo.size.w / logo.size.h);
+        if (w > maxW) { w = maxW; h = Math.round(w * logo.size.h / logo.size.w); }
+        const align = item.align || 'left';
+        const x = align === 'center' ? Math.round((M.w - w) / 2) : M.mx;
+        const top = Math.round(pick(item.anchor?.topFrac, format) * M.h);
+        ops.push({ op: 'layer.image', optional: true, args: { name: item.name, path: logo.path, x, y: top, w, h } });
+        emitted.set(item.name, { left: x, top, right: x + w, bottom: top + h, image: true });
+        addGroup(item);
+        continue;
+      }
     }
 
     if (item.type === 'text') {
@@ -358,7 +390,7 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
       const a = item.anchor || {};
       const args = {
         name: item.name, contents: lines.join('\n').slice(0, 600), x, size, color: col(item.color),
-        ...(font ? { font } : {}), ...(item.bold ? { weight: 'bold' } : {}),
+        ...((isHeadingItem(item.name) ? fonts.heading : fonts.body) ? { font: isHeadingItem(item.name) ? fonts.heading : fonts.body } : {}), ...(item.bold ? { weight: 'bold' } : {}),
         ...(item.tracking ? { tracking: item.tracking } : {}), ...(item.leadingMul ? { leading: box.lead } : {}),
         ...(align !== 'left' ? { align } : {})
       };
@@ -375,7 +407,11 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
       } else if (a.after) {
         const ref = firstExisting(a.after);
         if (!ref) { notes.push(`${item.name}: bağlı katman yok`); top = M.safeTop; }
-        else { args.afterLayer = ref; args.gap = Math.round((pick(a.gap, format) || 0) * sc); top = emitted.get(ref).bottom + args.gap; }
+        else {
+          const gapPx = Math.round((pick(a.gap, format) || 0) * sc);
+          if (!emitted.get(ref).image) { args.afterLayer = ref; args.gap = gapPx; }
+          top = emitted.get(ref).bottom + gapPx;
+        }
       } else if (a.afterBlock) {
         const ref = emitted.get(a.afterBlock);
         top = (ref ? ref.bottom : M.safeTop) + (a.gap || 0);

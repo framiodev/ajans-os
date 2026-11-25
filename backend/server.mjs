@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import express from 'express';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -17,6 +18,7 @@ import { lintSnapshot } from './services/ps/lint.mjs';
 import { buildOps, listRecipes } from './services/ps/recipes.mjs';
 import { parseRevision, pickLayer } from './services/ps/revise.mjs';
 import { selfTestOps, SELFTEST_NOTES } from './services/ps/selftest.mjs';
+import * as vault from './services/brandVault.mjs';
 import { safeFormat, safeSegment } from './security.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,7 +35,7 @@ app.use(express.json({ limit: '1mb' }));
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 function allowedImageRoots() {
-  const roots = [OUTPUT_DIR];
+  const roots = [OUTPUT_DIR, path.join(DATA_DIR, 'brands')];
   for (const r of db.prepare('SELECT assets_dir FROM brands').all()) if (r.assets_dir) roots.push(r.assets_dir);
   return roots;
 }
@@ -116,6 +118,65 @@ app.get('/api/brands/:id/assets', (req, res) => {
     .filter(f => exts.has(path.extname(f).toLowerCase()))
     .map(f => ({ name: f, fullPath: path.join(brand.assets_dir, f) }));
   res.json({ dir: brand.assets_dir, files });
+});
+
+// ---- Marka klasörü (Brand Vault) ----
+const brandRow = id => db.prepare('SELECT * FROM brands WHERE id = ?').get(id);
+function brandVaultDir(brand) {
+  const dir = vault.vaultDir(DATA_DIR, brand.id);
+  vault.ensureVault(dir);
+  return dir;
+}
+// Marka satırı + marka kiti (renk/font) + logo sürümleri; üretim hattı bunu kullanır.
+function brandWithKit(row) {
+  const dir = brandVaultDir(row);
+  const kit = vault.readKit(dir);
+  return {
+    ...row,
+    primary_color: kit.colors.primary || row.primary_color,
+    secondary_color: kit.colors.secondary || row.secondary_color,
+    accent_color: kit.colors.accent || row.accent_color,
+    fontHeading: kit.fontHeading, fontBody: kit.fontBody,
+    forbidden: kit.forbidden,
+    logos: vault.resolveLogos(dir, kit)
+  };
+}
+app.get('/api/brands/:id/vault', (req, res) => {
+  const brand = brandRow(req.params.id);
+  if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
+  const dir = brandVaultDir(brand);
+  const kit = vault.readKit(dir);
+  const { assets, warnings } = vault.vaultReport(dir, kit, brand);
+  res.json({ dir, kit, assets, warnings, folders: Object.keys(vault.FOLDERS) });
+});
+app.put('/api/brands/:id/kit', (req, res) => {
+  const brand = brandRow(req.params.id);
+  if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
+  res.json({ ok: true, kit: vault.writeKit(brandVaultDir(brand), req.body || {}) });
+});
+app.post('/api/brands/:id/assets/:folder', express.raw({ type: () => true, limit: '31mb' }), (req, res) => {
+  const brand = brandRow(req.params.id);
+  if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
+  try {
+    const saved = vault.saveAsset(brandVaultDir(brand), req.params.folder, req.query.name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
+    res.json({ ok: true, ...saved });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+app.delete('/api/brands/:id/assets/:folder/:name', (req, res) => {
+  const brand = brandRow(req.params.id);
+  if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
+  try { vault.removeAsset(brandVaultDir(brand), req.params.folder, req.params.name); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+app.post('/api/brands/:id/open-folder', (req, res) => {
+  const brand = brandRow(req.params.id);
+  if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
+  const dir = brandVaultDir(brand);
+  try {
+    const cmd = process.platform === 'win32' ? 'explorer' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+    spawn(cmd, [dir], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+    res.json({ ok: true, dir });
+  } catch (e) { res.json({ ok: false, dir, error: e.message }); }
 });
 
 app.get('/api/asset-file', (req, res) => {
@@ -405,8 +466,9 @@ app.post('/api/ps/selftest', async (_req, res) => {
 app.post('/api/ps/generate', async (req, res) => {
   try {
     const { brand_id, copy, format, recipe, heroImagePath } = req.body || {};
-    const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
-    if (!brand) return res.status(404).json({ ok: false, error: 'Marka bulunamadi' });
+    const brandRaw = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
+    if (!brandRaw) return res.status(404).json({ ok: false, error: 'Marka bulunamadi' });
+    const brand = brandWithKit(brandRaw);
     const fmt = safeFormat(format);
     let hero;
     if (heroImagePath) {
