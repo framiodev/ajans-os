@@ -5,7 +5,7 @@ export const FORMAT_DIMS = {
 };
 
 // Güvenli alan (kanvas oranı): [sol/sağ, üst, alt]
-const SAFE = { story: [0.06, 0.14, 0.20], reel: [0.06, 0.14, 0.20], default: [0.06, 0.05, 0.05] };
+export const SAFE = { story: [0.06, 0.14, 0.20], reel: [0.06, 0.14, 0.20], default: [0.06, 0.05, 0.05] };
 const DEFAULT_NAME = /^(layer|katman|group|grup|rectangle|dikdörtgen|ellipse|elips|text|metin|shape|şekil)\s*\d*(\s*copy.*|\s*kopya.*)?$/i;
 const TEXTY = /(headline|baslik|başlık|subcopy|body|aciklama|açıklama|eyebrow|cta|copy|metin|text)/i;
 
@@ -29,7 +29,7 @@ export function lintSnapshot(snapshot, { format = 'post' } = {}) {
   add('canvas_size', 'Kanvas ölçüsü formata uygun', doc.width === dims.w && doc.height === dims.h, true, `${doc.width}×${doc.height} (beklenen ${dims.w}×${dims.h})`);
   add('resolution', 'Çözünürlük 72 ppi', Number(doc.resolution) === 72, false, `${doc.resolution} ppi`);
 
-  const rasterText = leaves.filter(l => l.kind !== 'text' && TEXTY.test(l.name));
+  const rasterText = leaves.filter(l => (l.kind === 'pixel' || l.kind === 'smartObject') && TEXTY.test(l.name));
   add('live_text', 'Metin katmanları canlı (rasterize değil)', rasterText.length === 0, true, rasterText.map(l => l.name).join(', '));
   add('has_text', 'En az bir metin katmanı var', texts.length > 0, true);
 

@@ -4,6 +4,8 @@ const COLOR = /^#[0-9a-fA-F]{6}$/;
 const num = (v, lo, hi) => Number.isFinite(v) && v >= lo && v <= hi;
 const str = (v, max = 2000) => typeof v === 'string' && v.length > 0 && v.length <= max;
 const name = v => str(v, 120);
+const opt = (v, fn) => v === undefined || fn(v);
+const stroke = v => v === undefined || (v && typeof v === 'object' && COLOR.test(v.color || '') && num(v.width, 0.5, 64));
 
 // Eklentiye gönderilebilecek tek işlem listesi. Serbest betik yok: her işlem şemalıdır.
 export const OPS = {
@@ -13,12 +15,28 @@ export const OPS = {
   'doc.open': a => str(a.path, 500) && /\.psd$/i.test(a.path),
   'doc.save': a => str(a.psdPath, 500) && /\.psd$/i.test(a.psdPath) && (a.pngPath === undefined || (str(a.pngPath, 500) && /\.png$/i.test(a.pngPath))),
   'layer.solid': a => name(a.name) && COLOR.test(a.color || ''),
-  'layer.text': a => name(a.name) && str(a.contents, 600) && num(a.x, -8000, 8000) && num(a.y, -8000, 8000) && num(a.size, 4, 800) && COLOR.test(a.color || '')
-    && (a.font === undefined || str(a.font, 120)) && (a.maxWidth === undefined || num(a.maxWidth, 16, 8000)),
+  // y mutlak üst kenar; afterLayer verilirse o katmanın alt kenarı + gap (gerçek Photoshop ölçüsüyle).
+  'layer.text': a => name(a.name) && str(a.contents, 600) && num(a.x, -8000, 8000) && num(a.size, 4, 800) && COLOR.test(a.color || '')
+    && (a.afterLayer !== undefined ? name(a.afterLayer) && opt(a.gap, v => num(v, -2000, 2000)) : num(a.y, -8000, 8000))
+    && opt(a.font, v => str(v, 120)) && opt(a.weight, v => v === 'regular' || v === 'bold')
+    && opt(a.tracking, v => num(v, -200, 1000)) && opt(a.leading, v => num(v, 4, 2000))
+    && opt(a.align, v => v === 'left' || v === 'center' || v === 'right') && opt(a.maxWidth, v => num(v, 16, 8000)),
+  'shape.rect': a => name(a.name) && num(a.w, 1, 8000) && num(a.h, 1, 8000) && num(a.x, -8000, 8000) && COLOR.test(a.color || '')
+    && (a.afterLayer !== undefined ? name(a.afterLayer) && opt(a.gap, v => num(v, -2000, 2000)) : num(a.y, -8000, 8000))
+    && opt(a.radius, v => num(v, 0, 4000)) && opt(a.opacity, v => num(v, 0, 100)) && stroke(a.stroke),
+  'shape.ellipse': a => name(a.name) && num(a.w, 1, 8000) && num(a.h, 1, 8000) && num(a.x, -8000, 8000) && num(a.y, -8000, 8000)
+    && COLOR.test(a.color || '') && opt(a.opacity, v => num(v, 0, 100)) && stroke(a.stroke),
+  // Metin katmanının gerçek ölçüsüne göre arkasına şekil çizer (etiket, buton).
+  'shape.behindText': a => name(a.name) && name(a.textLayer) && COLOR.test(a.color || '')
+    && num(a.padX, 0, 1000) && num(a.padY, 0, 1000) && opt(a.minW, v => num(v, 1, 8000))
+    && opt(a.radius, v => num(v, 0, 4000)) && opt(a.opacity, v => num(v, 0, 100)) && stroke(a.stroke),
+  // Görsel yerleştirir (kapla/cover). Yalnızca isteğe bağlı adım olarak kullanılır.
+  'layer.image': a => name(a.name) && str(a.path, 500) && /\.(png|jpe?g|webp)$/i.test(a.path)
+    && num(a.x, -8000, 8000) && num(a.y, -8000, 8000) && num(a.w, 1, 8000) && num(a.h, 1, 8000),
   'layer.setText': a => name(a.name) && str(a.contents, 600),
   'layer.setTextSize': a => name(a.name) && num(a.size, 4, 800),
   'layer.rename': a => name(a.from) && name(a.to),
-  'group.create': a => name(a.name) && Array.isArray(a.layers) && a.layers.length <= 50 && a.layers.every(name)
+  'group.create': a => name(a.name) && Array.isArray(a.layers) && a.layers.length <= 50 && a.layers.every(name) && opt(a.skipMissing, v => typeof v === 'boolean')
 };
 
 export class PsBridge {
@@ -88,18 +106,28 @@ export class PsBridge {
   }
 
   // İşlem listesini sırayla çalıştırır; ilk hatada durur ve hangi adımda kaldığını söyler.
+  // optional:true olan adım başarısız olursa uyarı olarak kaydedilir, akış devam eder.
   async runOps(ops, opts) {
     const results = [];
+    const warnings = [];
     for (let i = 0; i < ops.length; i++) {
       try {
-        results.push(await this.request(ops[i].op, ops[i].args, opts));
+        const r = await this.request(ops[i].op, ops[i].args, opts);
+        results.push(r);
+        for (const w of (r && r.warnings) || []) warnings.push(`${ops[i].args?.name || ops[i].op}: ${w}`);
       } catch (e) {
+        if (ops[i].optional && !/bağlı değil|bağlantısı koptu/i.test(e.message)) {
+          warnings.push(`${ops[i].args?.name || ops[i].op}: atlandı (${e.message})`);
+          results.push(null);
+          continue;
+        }
         const err = new Error(`Adım ${i + 1}/${ops.length} (${ops[i].op}): ${e.message}`);
         err.step = i;
         err.partial = results;
         throw err;
       }
     }
+    results.warnings = warnings;
     return results;
   }
 }

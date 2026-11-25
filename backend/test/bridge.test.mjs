@@ -80,3 +80,27 @@ test('runOps ilk hatada durur ve adımı bildirir; istekler sıralı', async () 
   assert.deepEqual(order, ['ping', 'layer.solid']);
   p.ws.close(); s.close();
 });
+
+test('runOps: optional adım başarısız olursa uyarıyla devam eder, zorunlu adım durdurur', async () => {
+  const s = await setup();
+  const p = fakePlugin(s.port, (op, args) => {
+    if (op === 'layer.image') throw new Error('görsel açılamadı');
+    if (op === 'shape.rect' && args.name === 'KIRIK') throw new Error('şekil hatası');
+    return { ok: true, warnings: op === 'layer.text' ? ['tracking uygulanamadı'] : [] };
+  });
+  await p.opened; p.hello();
+  await until(() => s.bridge.status().connected);
+  const res = await s.bridge.runOps([
+    { op: 'layer.image', optional: true, args: { name: 'Hero', path: 'C:/a.png', x: 0, y: 0, w: 100, h: 100 } },
+    { op: 'layer.text', args: { name: 'T', contents: 'x', x: 0, y: 0, size: 20, color: '#FFFFFF' } }
+  ]);
+  assert.equal(res[0], null);
+  assert.equal(res.warnings.length, 2);
+  assert.match(res.warnings[0], /Hero: atlandı/);
+  assert.match(res.warnings[1], /tracking/);
+  await assert.rejects(
+    () => s.bridge.runOps([{ op: 'shape.rect', args: { name: 'KIRIK', x: 0, y: 0, w: 10, h: 10, color: '#000000' } }]),
+    /Adım 1\/1 \(shape\.rect\)/
+  );
+  p.ws.close(); s.close();
+});
