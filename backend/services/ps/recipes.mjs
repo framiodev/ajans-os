@@ -145,6 +145,7 @@ export const SEED_RECIPES = [
       { type: 'text', name: 'Meta_Text', bind: 'copy.meta|brand.sector', upper: true, size: 22, tracking: 160, color: 'muted', align: 'right', anchor: { sameTopAs: 'Brand_Logo' }, optional: true, dropIfOverlaps: 'Brand_Logo', group: 'Header' },
       { type: 'rect', name: 'Accent_Bar', x: 'left', w: 120, h: 9, color: 'accentOnBg', anchor: { after: ['Brand_Logo'], gap: { default: 54, story: 70 } }, group: 'Header' },
       { type: 'text', name: 'Eyebrow_Text', bind: 'copy.eyebrow', upper: true, size: 26, bold: true, tracking: 200, color: 'accentOnBg', anchor: { after: ['Accent_Bar'], gap: { default: 64, story: 120 } }, group: 'Copy' },
+      { type: 'arrow', name: 'Route_Arrow', sameTopAs: 'Eyebrow_Text', w: 170, dy: 12, thickness: 9, color: 'accentOnBg', align: 'right', group: 'Copy' },
       { type: 'text', name: 'Headline_H1', bind: 'copy.title:first', size: { default: 136, linkedin: 108 }, bold: true, color: 'fg', leadingMul: 1.0, maxWidth: 1, anchor: { after: ['Eyebrow_Text', 'Accent_Bar'], gap: 26 }, group: 'Copy' },
       { type: 'text', name: 'Headline_H1b', bind: 'copy.title:rest', size: { default: 136, linkedin: 108 }, bold: true, color: 'accentOnBg', leadingMul: 1.0, maxWidth: 1, anchor: { after: ['Headline_H1'], gap: 6 }, group: 'Copy' },
       { type: 'text', name: 'Subcopy_Body', bind: 'copy.desc', size: 36, color: 'fgSoft', leadingMul: 1.36, maxWidth: { default: 0.82, linkedin: 1 }, anchor: { after: ['Headline_H1b', 'Headline_H1', 'Eyebrow_Text'], gap: 44 }, group: 'Copy' },
@@ -288,6 +289,25 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
     if (item.type === 'image') {
       ops.push({ op: 'layer.image', optional: true, args: { name: item.name, path: heroImagePath, x: 0, y: 0, w: M.w, h: M.h } });
       emitted.set(item.name, { left: 0, top: 0, right: M.w, bottom: M.h });
+      addGroup(item);
+      continue;
+    }
+
+    if (item.type === 'gradient') {
+      ops.push({ op: 'shape.gradient', optional: true, args: { name: item.name, color: col(item.color), angle: pick(item.angle, format) ?? 90, opacityStart: item.opacityStart ?? 0, opacityEnd: item.opacityEnd ?? 80 } });
+      emitted.set(item.name, { left: 0, top: 0, right: M.w, bottom: M.h });
+      addGroup(item);
+      continue;
+    }
+
+    if (item.type === 'arrow') {
+      const ref = emitted.get(item.sameTopAs);
+      if (!ref) continue;
+      const w = pick(item.w, format);
+      const x = item.align === 'right' ? M.w - M.mx - w : M.mx;
+      const y = Math.round(ref.top + (item.dy || 0));
+      ops.push({ op: 'shape.arrow', optional: true, args: { name: item.name, x, y, w, thickness: item.thickness || 8, color: col(item.color), ...(item.direction ? { direction: item.direction } : {}) } });
+      emitted.set(item.name, { left: x, top: y - w * 0.2, right: x + w, bottom: y + w * 0.2 });
       addGroup(item);
       continue;
     }

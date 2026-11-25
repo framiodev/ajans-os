@@ -16,6 +16,7 @@ import { attachWebSocket } from './services/ps/wsServer.mjs';
 import { lintSnapshot } from './services/ps/lint.mjs';
 import { buildOps, listRecipes } from './services/ps/recipes.mjs';
 import { parseRevision, pickLayer } from './services/ps/revise.mjs';
+import { selfTestOps, SELFTEST_NOTES } from './services/ps/selftest.mjs';
 import { safeFormat, safeSegment } from './security.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -367,7 +368,12 @@ function getBridgeToken() {
 }
 const BRIDGE_TOKEN = getBridgeToken();
 
-app.get('/api/ps/status', (_req, res) => res.json(bridge.status()));
+const MIN_PLUGIN = '0.3.0';
+const semverLt = (a, b) => { const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); } return false; };
+app.get('/api/ps/status', (_req, res) => {
+  const st = bridge.status();
+  res.json({ ...st, minPlugin: MIN_PLUGIN, pluginOutdated: !!(st.connected && st.plugin && semverLt(st.plugin, MIN_PLUGIN)) });
+});
 app.get('/api/ps/info', (_req, res) => res.json({ token: BRIDGE_TOKEN, port: Number(PORT) }));
 
 async function snapshotAndLint(format) {
@@ -384,6 +390,17 @@ app.post('/api/ps/snapshot', async (req, res) => {
 });
 
 app.get('/api/recipes', (_req, res) => res.json(listRecipes()));
+
+// Photoshop yetenek testi: yeni işlemlerin PS sürümünde çalışıp çalışmadığını tek tuşla raporlar.
+app.post('/api/ps/selftest', async (_req, res) => {
+  try {
+    const ops = selfTestOps({ dir: path.join(OUTPUT_DIR, 'selftest') });
+    const report = await bridge.runOpsReport(ops, { timeoutMs: 60000 });
+    res.json({ ok: true, passed: report.filter(r => r.ok).length, total: report.length, report: report.map(r => ({ ...r, label: SELFTEST_NOTES[r.op] || r.op })), pluginVersion: bridge.status().plugin || null });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message });
+  }
+});
 
 app.post('/api/ps/generate', async (req, res) => {
   try {

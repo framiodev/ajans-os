@@ -33,6 +33,14 @@ export const OPS = {
   // Görsel yerleştirir (kapla/cover). Yalnızca isteğe bağlı adım olarak kullanılır.
   'layer.image': a => name(a.name) && str(a.path, 500) && /\.(png|jpe?g|webp)$/i.test(a.path)
     && num(a.x, -8000, 8000) && num(a.y, -8000, 8000) && num(a.w, 1, 8000) && num(a.h, 1, 8000),
+  // Kanvası kaplayan renk geçişi (scrim). angle: 90 = alttan üste.
+  'shape.gradient': a => name(a.name) && COLOR.test(a.color || '') && opt(a.angle, v => num(v, -360, 360))
+    && opt(a.opacityStart, v => num(v, 0, 100)) && opt(a.opacityEnd, v => num(v, 0, 100)),
+  'shape.arrow': a => name(a.name) && num(a.w, 8, 2000) && num(a.x, -8000, 8000) && num(a.y, -8000, 8000)
+    && COLOR.test(a.color || '') && opt(a.thickness, v => num(v, 1, 200)) && opt(a.direction, v => v === 'left' || v === 'right'),
+  'layer.shadow': a => name(a.name) && opt(a.color, v => COLOR.test(v)) && opt(a.opacity, v => num(v, 0, 100))
+    && opt(a.blur, v => num(v, 0, 250)) && opt(a.distance, v => num(v, 0, 250)) && opt(a.angle, v => num(v, -360, 360)),
+  'mask.subject': a => name(a.name),
   'layer.setText': a => name(a.name) && str(a.contents, 600),
   'layer.setTextSize': a => name(a.name) && num(a.size, 4, 800),
   'layer.rename': a => name(a.from) && name(a.to),
@@ -107,6 +115,20 @@ export class PsBridge {
 
   // İşlem listesini sırayla çalıştırır; ilk hatada durur ve hangi adımda kaldığını söyler.
   // optional:true olan adım başarısız olursa uyarı olarak kaydedilir, akış devam eder.
+  // Hata olsa da durmadan her adımı dener ve adım adım rapor verir (Photoshop yetenek testi için).
+  async runOpsReport(ops, opts) {
+    const report = [];
+    for (const o of ops) {
+      const t0 = Date.now();
+      try { await this.request(o.op, o.args, opts); report.push({ op: o.op, name: o.args?.name || '', ok: true, ms: Date.now() - t0 }); }
+      catch (e) {
+        if (/bağlı değil|bağlantısı koptu/i.test(e.message)) throw e;
+        report.push({ op: o.op, name: o.args?.name || '', ok: false, error: String(e.message).slice(0, 300), ms: Date.now() - t0 });
+      }
+    }
+    return report;
+  }
+
   async runOps(ops, opts) {
     const results = [];
     const warnings = [];

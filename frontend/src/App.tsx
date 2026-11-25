@@ -95,7 +95,8 @@ export default function App() {
   const [genInfo, setGenInfo] = useState<{ recipe?: string; notes: string[]; warnings: string[] } | null>(null);
   const [qaScore, setQaScore] = useState<number | null>(null);
   const [qaBars, setQaBars] = useState<Record<string, number> | null>(null);
-  const [psStatus, setPsStatus] = useState<{ connected: boolean; photoshop?: string; plugin?: string }>({ connected: false });
+  const [psStatus, setPsStatus] = useState<{ connected: boolean; photoshop?: string; plugin?: string; pluginOutdated?: boolean; minPlugin?: string }>({ connected: false });
+  const [selfTest, setSelfTest] = useState<{ running: boolean; error?: string; passed?: number; total?: number; report?: { op: string; label: string; ok: boolean; error?: string }[] }>({ running: false });
   const [upd, setUpd] = useState<{ status: string; current?: string; latest?: string | null; percent?: number; error?: string | null }>({ status: 'idle' });
   const [psInfo, setPsInfo] = useState<{ token: string; port: number } | null>(null);
   const [qaChecks, setQaChecks] = useState<{ id: string; label: string; ok: boolean; detail?: string }[]>([]);
@@ -151,6 +152,18 @@ export default function App() {
     const t2 = setInterval(pollUpd, 5000);
     return () => { alive = false; clearInterval(t); clearInterval(t2); };
   }, []);
+
+  const runSelfTest = async () => {
+    setSelfTest({ running: true });
+    try {
+      const r = await fetch('/api/ps/selftest', { method: 'POST' });
+      const j = await r.json();
+      if (!j.ok) setSelfTest({ running: false, error: j.error || 'Test çalışmadı' });
+      else setSelfTest({ running: false, passed: j.passed, total: j.total, report: j.report });
+    } catch (e) {
+      setSelfTest({ running: false, error: 'Sunucuya ulaşılamadı' });
+    }
+  };
 
   useEffect(() => {
     fetch('/api/brands').then(r => r.json()).then((data: Brand[]) => {
@@ -975,6 +988,26 @@ export default function App() {
                 <div className="font-semibold">Photoshop Köprüsü (UXP eklentisi)</div>
                 <div className={psStatus.connected ? 'text-emerald-400' : 'text-zinc-400'}>
                   {psStatus.connected ? `Bağlı — Photoshop ${psStatus.photoshop}, eklenti ${psStatus.plugin}` : 'Bağlı değil. Kurulum: docs/ps-plugin-kurulum.md'}
+                </div>
+                {psStatus.connected && psStatus.pluginOutdated && (
+                  <div className="text-amber-400">Eklenti eski (v{psStatus.plugin}). En az v{psStatus.minPlugin} gerekli: klonda git pull yapıp UDT'de Reload edin.</div>
+                )}
+                <div className="pt-2 space-y-2">
+                  <button disabled={!psStatus.connected || selfTest.running} onClick={runSelfTest} className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 font-semibold">
+                    {selfTest.running ? 'Test çalışıyor…' : 'Photoshop Yetenek Testi'}
+                  </button>
+                  <div className="text-zinc-500">Boş bir belgede tüm işlemleri dener ve her birinin çalışıp çalışmadığını gösterir.</div>
+                  {selfTest.error && <div className="text-red-400">{selfTest.error}</div>}
+                  {selfTest.report && (
+                    <div className="space-y-1">
+                      <div className="font-semibold">{selfTest.passed}/{selfTest.total} işlem çalıştı</div>
+                      {selfTest.report.map((r, i) => (
+                        <div key={i} className={r.ok ? 'text-emerald-400' : 'text-red-400'}>
+                          {r.ok ? '✓' : '✗'} {r.label}{r.error ? ` — ${r.error}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {psInfo && (
                   <div className="space-y-1">
