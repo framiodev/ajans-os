@@ -127,3 +127,33 @@ test('metrics: güvenli alan ve sütun genişliği', () => {
   assert.equal(m.h, 1920);
   assert.ok(m.safeBottomY < 1920 && m.contentW < m.w);
 });
+
+test('yeni tarifler: şehir vurgu iki tonlu başlık, kampanya fiyatı yalnızca varsa çizilir, açık tarif açık zemin kullanır', () => {
+  const ids = SEED_RECIPES.map(r => r.id);
+  for (const id of ['sehir-vurgu', 'kampanya-fiyat', 'editoryal-acik']) assert.ok(ids.includes(id), id);
+  const sehir = compile(SEED_RECIPES.find(r => r.id === 'sehir-vurgu'), { title: 'Ankara İstanbul', cta: 'Bilet Al' }, 'post');
+  const names = sehir.map(o => o.args.name);
+  assert.ok(names.includes('Headline_H1') && names.includes('Headline_H1b'));
+  assert.match(sehir.find(o => o.args.name === 'Headline_H1').args.contents, /ANKARA|Ankara/i);
+  const tek = compile(SEED_RECIPES.find(r => r.id === 'sehir-vurgu'), { title: 'Ankara' }, 'post');
+  assert.ok(!tek.some(o => o.args.name === 'Headline_H1b'));
+  const kampanya = SEED_RECIPES.find(r => r.id === 'kampanya-fiyat');
+  assert.ok(compile(kampanya, { title: 'Ankara İstanbul', price: '399 TL' }, 'post').some(o => o.args.name === 'Price_Text'));
+  assert.ok(!compile(kampanya, { title: 'Ankara İstanbul' }, 'post').some(o => o.args.name === 'Price_Text'));
+  const acik = compile(SEED_RECIPES.find(r => r.id === 'editoryal-acik'), BRIEFS[0], 'post');
+  assert.equal(acik[1].args.color, '#F5F2EC');
+});
+
+test('story formatında içerik büyütülür (alt yarı boş kalmasın) ve yine sığar', () => {
+  for (const r of SEED_RECIPES) {
+    const ops = compile(r, BRIEFS[2], 'story');
+    assert.ok(ops.fits, r.id);
+  }
+});
+
+test('otomatik seçim eski üç tarifle sınırlı kalır (marka sürekliliği bozulmaz)', () => {
+  for (const id of ['vega', 'a', 'baskent', 'framio', 'x1']) {
+    assert.ok(!chooseRecipe({ id }).manual);
+  }
+  assert.equal(chooseRecipe({ id: 'vega' }, 'sehir-vurgu').id, 'sehir-vurgu');
+});

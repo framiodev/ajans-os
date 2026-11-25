@@ -17,10 +17,12 @@ export const contrastRatio = (a, b) => { const [x, y] = [luminance(a), luminance
 const LIGHT = '#F8FAFC', DARK = '#0B1120';
 const onColor = bg => (contrastRatio(bg, LIGHT) >= contrastRatio(bg, DARK) ? LIGHT : DARK);
 
-export function colorTokens(brand) {
-  const bg = hexOk(brand.primary_color, '#0F172A');
+export function colorTokens(brand, opts = {}) {
+  const primary = hexOk(brand.primary_color, '#0F172A');
   const accentRaw = hexOk(brand.accent_color, '#38BDF8');
-  const fg = onColor(bg);
+  // paper: açık, kâğıt tonlu zemin; metin marka koyusu (okunaklıysa) ya da koyu lacivert.
+  const bg = opts.paper ? '#F5F2EC' : primary;
+  const fg = opts.paper ? (contrastRatio(primary, bg) >= 7 ? primary : DARK) : onColor(bg);
   const accentOnBg = contrastRatio(bg, accentRaw) >= 3 ? accentRaw : fg;
   return {
     bg, fg, accentRaw, accentOnBg,
@@ -123,11 +125,73 @@ export const SEED_RECIPES = [
 
       { type: 'text', name: 'Brand_Logo', bind: 'brand.name', upper: true, size: 30, bold: true, tracking: 220, color: 'onAccentRaw', anchor: { topFrac: TOP }, group: 'Header' },
       { type: 'text', name: 'Eyebrow_Text', bind: 'copy.eyebrow', upper: true, size: 24, bold: true, tracking: 180, color: 'onAccentRaw', anchor: { after: ['Brand_Logo'], gap: { default: 90, story: 130 } }, group: 'Copy' },
-      { type: 'text', name: 'Headline_H1', bind: 'copy.title', size: { default: 82, linkedin: 76 }, bold: true, color: 'onAccentRaw', leadingMul: 1.05, maxWidth: { default: 0.9, linkedin: 0.9 }, anchor: { after: ['Eyebrow_Text', 'Brand_Logo'], gap: 28 }, group: 'Copy' },
+      { type: 'text', name: 'Headline_H1', bind: 'copy.title', size: { default: 82, linkedin: 76 }, bold: true, color: 'onAccentRaw', leadingMul: 1.05, maxWidth: { default: 0.9, linkedin: 0.9 }, within: 'Block_Accent', anchor: { after: ['Eyebrow_Text', 'Brand_Logo'], gap: 28 }, group: 'Copy' },
       { type: 'text', name: 'Subcopy_Body', bind: 'copy.desc', size: 34, color: 'fgSoft', leadingMul: 1.36, maxWidth: { default: 0.84, linkedin: 0.9 }, anchor: { afterBlock: 'Block_Accent', gap: 56 }, group: 'Copy' },
       { type: 'text', name: 'CTA_Text', bind: 'copy.cta', upper: true, size: 28, bold: true, tracking: 160, color: 'onFg', inset: 40, anchor: { after: ['Subcopy_Body'], gap: 50 + 26 }, group: 'CTA' },
       { type: 'behindText', name: 'CTA_Button', of: 'CTA_Text', padX: 40, padY: 26, radius: 6, color: 'fg', minW: 300, group: 'CTA' },
       { type: 'text', name: 'URL_Text', bind: 'brand.url', size: 24, tracking: 60, color: 'muted', anchor: { bottom: true, offset: 0 }, optional: true, group: 'Footer' }
+    ]
+  },
+  {
+    id: 'sehir-vurgu',
+    manual: true,
+    name: 'Şehir Vurgu',
+    description: 'Çok iri, iki tonlu başlık (ilk sözcük beyaz, kalan vurgu renginde). Şehir, rota, sefer ve duyuru başlıkları için; seyahat/turizm markalarında güçlü.',
+    items: [
+      { type: 'bg', name: 'BG_Base', color: 'bg' },
+      { type: 'ellipse', name: 'Visual_Orb_A', cx: { default: 0.88, story: 0.9, linkedin: 0.86 }, cy: { default: 0.92, story: 0.9, linkedin: 0.9 }, d: { default: 0.9, linkedin: 1.1 }, color: 'accentOnBg', opacity: 10, group: 'Visual' },
+      { type: 'ellipse', name: 'Visual_Orb_B', cx: { default: 0.88, story: 0.9, linkedin: 0.86 }, cy: { default: 0.92, story: 0.9, linkedin: 0.9 }, d: { default: 0.5, linkedin: 0.6 }, color: 'accentOnBg', opacity: 14, group: 'Visual' },
+      { type: 'text', name: 'Brand_Logo', bind: 'brand.name', upper: true, size: 30, bold: true, tracking: 220, color: 'fg', anchor: { topFrac: TOP }, group: 'Header' },
+      { type: 'text', name: 'Meta_Text', bind: 'copy.meta|brand.sector', upper: true, size: 22, tracking: 160, color: 'muted', align: 'right', anchor: { sameTopAs: 'Brand_Logo' }, optional: true, dropIfOverlaps: 'Brand_Logo', group: 'Header' },
+      { type: 'rect', name: 'Accent_Bar', x: 'left', w: 120, h: 9, color: 'accentOnBg', anchor: { after: ['Brand_Logo'], gap: { default: 54, story: 70 } }, group: 'Header' },
+      { type: 'text', name: 'Eyebrow_Text', bind: 'copy.eyebrow', upper: true, size: 26, bold: true, tracking: 200, color: 'accentOnBg', anchor: { after: ['Accent_Bar'], gap: { default: 64, story: 120 } }, group: 'Copy' },
+      { type: 'text', name: 'Headline_H1', bind: 'copy.title:first', size: { default: 136, linkedin: 108 }, bold: true, color: 'fg', leadingMul: 1.0, maxWidth: 1, anchor: { after: ['Eyebrow_Text', 'Accent_Bar'], gap: 26 }, group: 'Copy' },
+      { type: 'text', name: 'Headline_H1b', bind: 'copy.title:rest', size: { default: 136, linkedin: 108 }, bold: true, color: 'accentOnBg', leadingMul: 1.0, maxWidth: 1, anchor: { after: ['Headline_H1'], gap: 6 }, group: 'Copy' },
+      { type: 'text', name: 'Subcopy_Body', bind: 'copy.desc', size: 36, color: 'fgSoft', leadingMul: 1.36, maxWidth: { default: 0.82, linkedin: 1 }, anchor: { after: ['Headline_H1b', 'Headline_H1', 'Eyebrow_Text'], gap: 44 }, group: 'Copy' },
+      { type: 'text', name: 'CTA_Text', bind: 'copy.cta', upper: true, size: 30, bold: true, tracking: 160, color: 'onAccent', inset: 44, anchor: { after: ['Subcopy_Body', 'Headline_H1b', 'Headline_H1'], gap: 56 + 28 }, group: 'CTA' },
+      { type: 'behindText', name: 'CTA_Button', of: 'CTA_Text', padX: 44, padY: 28, radius: 'full', color: 'accentOnBg', minW: 320, group: 'CTA' },
+      { type: 'text', name: 'URL_Text', bind: 'brand.url', size: 24, tracking: 60, color: 'muted', anchor: { bottom: true, offset: 0 }, optional: true, group: 'Footer' }
+    ]
+  },
+  {
+    id: 'kampanya-fiyat',
+    manual: true,
+    name: 'Kampanya / Fiyat',
+    description: 'İri fiyat veya rakam öne çıkar (copy.price). Fiyat yoksa başlık öne çıkar. İndirim, sefer fiyatı, kampanya ve paket duyuruları için.',
+    items: [
+      { type: 'bg', name: 'BG_Base', color: 'bg' },
+      { type: 'rect', name: 'Visual_Band', x: 'left', w: 'full', h: 16, color: 'accentOnBg', anchor: { top: 0 }, group: 'Visual' },
+      { type: 'ellipse', name: 'Visual_Orb_A', cx: { default: 0.1, linkedin: 0.12 }, cy: { default: 0.95, linkedin: 0.9 }, d: { default: 0.8, linkedin: 1 }, color: 'accentOnBg', opacity: 10, group: 'Visual' },
+      { type: 'text', name: 'Brand_Logo', bind: 'brand.name', upper: true, size: 30, bold: true, tracking: 220, color: 'fg', anchor: { topFrac: TOP }, group: 'Header' },
+      { type: 'text', name: 'Eyebrow_Text', bind: 'copy.eyebrow', upper: true, size: 26, bold: true, tracking: 160, color: 'onAccent', inset: 24, anchor: { after: ['Brand_Logo'], gap: { default: 120, story: 160 } }, group: 'Copy' },
+      { type: 'behindText', name: 'Eyebrow_Tag', of: 'Eyebrow_Text', padX: 24, padY: 14, radius: 'full', color: 'accentOnBg', group: 'Copy' },
+      { type: 'text', name: 'Price_Text', bind: 'copy.price', size: { default: 230, linkedin: 170 }, bold: true, color: 'accentOnBg', leadingMul: 1.0, maxWidth: 1, anchor: { after: ['Eyebrow_Tag', 'Brand_Logo'], gap: 40 }, group: 'Copy' },
+      { type: 'text', name: 'Headline_H1', bind: 'copy.title', size: { default: 76, linkedin: 66 }, bold: true, color: 'fg', leadingMul: 1.06, maxWidth: { default: 0.92, linkedin: 0.9 }, anchor: { after: ['Price_Text', 'Eyebrow_Tag', 'Brand_Logo'], gap: 30 }, group: 'Copy' },
+      { type: 'text', name: 'Subcopy_Body', bind: 'copy.desc', size: 34, color: 'fgSoft', leadingMul: 1.36, maxWidth: { default: 0.84, linkedin: 1 }, anchor: { after: ['Headline_H1'], gap: 30 }, group: 'Copy' },
+      { type: 'text', name: 'CTA_Text', bind: 'copy.cta', upper: true, size: 30, bold: true, tracking: 160, color: 'onFg', inset: 44, anchor: { after: ['Subcopy_Body', 'Headline_H1'], gap: 50 + 28 }, group: 'CTA' },
+      { type: 'behindText', name: 'CTA_Button', of: 'CTA_Text', padX: 44, padY: 28, radius: 6, color: 'fg', minW: 320, group: 'CTA' },
+      { type: 'text', name: 'URL_Text', bind: 'brand.url', size: 24, tracking: 60, color: 'muted', anchor: { bottom: true, offset: 0 }, optional: true, group: 'Footer' }
+    ]
+  },
+  {
+    id: 'editoryal-acik',
+    manual: true,
+    name: 'Editoryal Açık',
+    description: 'Açık kâğıt tonlu zemin, marka koyusuyla metin, solda dikey renk şeridi. Koyu tariflerle ritim değişimi sağlar; sakin, güven veren markalar için.',
+    paper: true,
+    items: [
+      { type: 'bg', name: 'BG_Base', color: 'bg' },
+      { type: 'rect', name: 'Visual_Band', x: 'edge', w: 22, h: 'full', color: 'accentOnBg', anchor: { top: 0 }, group: 'Visual' },
+      { type: 'text', name: 'Brand_Logo', bind: 'brand.name', upper: true, size: 30, bold: true, tracking: 220, color: 'fg', inset: 24, anchor: { topFrac: TOP }, group: 'Header' },
+      { type: 'text', name: 'Meta_Text', bind: 'copy.meta|brand.sector', upper: true, size: 22, tracking: 160, color: 'muted', align: 'right', anchor: { sameTopAs: 'Brand_Logo' }, optional: true, dropIfOverlaps: 'Brand_Logo', group: 'Header' },
+      { type: 'rect', name: 'Header_Rule', x: 'left', w: 'content', h: 2, color: 'rule', anchor: { after: ['Brand_Logo'], gap: 34 }, group: 'Header' },
+      { type: 'text', name: 'Eyebrow_Text', bind: 'copy.eyebrow', upper: true, size: 26, bold: true, tracking: 180, color: 'accentOnBg', inset: 24, anchor: { after: ['Header_Rule'], gap: { default: 100, story: 140 } }, group: 'Copy' },
+      { type: 'text', name: 'Headline_H1', bind: 'copy.title', size: { default: 96, linkedin: 82 }, bold: true, color: 'fg', leadingMul: 1.05, maxWidth: { default: 0.88, linkedin: 1 }, inset: 24, anchor: { after: ['Eyebrow_Text', 'Header_Rule'], gap: 34 }, group: 'Copy' },
+      { type: 'rect', name: 'Accent_Bar', x: 'left', w: 96, h: 8, color: 'accentOnBg', anchor: { after: ['Headline_H1'], gap: 38 }, group: 'Copy' },
+      { type: 'text', name: 'Subcopy_Body', bind: 'copy.desc', size: 36, color: 'fgSoft', leadingMul: 1.38, maxWidth: { default: 0.8, linkedin: 1 }, inset: 24, anchor: { after: ['Accent_Bar', 'Headline_H1'], gap: 34 }, group: 'Copy' },
+      { type: 'text', name: 'CTA_Text', bind: 'copy.cta', upper: true, size: 30, bold: true, tracking: 160, color: 'onAccent', inset: 68, anchor: { after: ['Subcopy_Body', 'Accent_Bar', 'Headline_H1'], gap: 60 + 28 }, group: 'CTA' },
+      { type: 'behindText', name: 'CTA_Button', of: 'CTA_Text', padX: 44, padY: 28, radius: 0, color: 'accentOnBg', minW: 320, group: 'CTA' },
+      { type: 'text', name: 'URL_Text', bind: 'brand.url', size: 24, tracking: 60, color: 'muted', inset: 24, anchor: { bottom: true, offset: 0 }, optional: true, group: 'Footer' }
     ]
   }
 ];
@@ -142,7 +206,8 @@ export function chooseRecipe(brand, recipeId) {
   if (byId) return byId;
   let h = 0;
   for (const ch of String(brand?.id || brand?.name || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return SEED_RECIPES[h % SEED_RECIPES.length];
+  const auto = SEED_RECIPES.filter(r => !r.manual); // yeni tarifler marka ailesi netleşene kadar yalnızca elle seçilir
+  return auto[h % auto.length];
 }
 
 // ---------- derleyici ----------
@@ -155,13 +220,18 @@ export function metrics(format) {
 
 function bindValue(bind, { brand, copy }) {
   for (const b of String(bind || '').split('|')) {
-    const [src, key] = b.split('.');
+    const [src, keyRaw] = b.split('.');
+    const [key, part] = String(keyRaw || '').split(':');
     let v;
     if (src === 'brand') {
       if (key === 'url') v = String(brand.website || '').replace(/^https?:\/\//i, '').replace(/\/+$/, '');
       else v = brand[key];
     } else if (src === 'copy') v = copy[key];
     v = sanitize(v);
+    if (v && part) {
+      const words = v.split(/\s+/);
+      v = part === 'first' ? words[0] : words.slice(1).join(' ');
+    }
     if (v) return v;
   }
   return '';
@@ -181,7 +251,8 @@ export function textBox(item, size, lines) {
 // İçerik sığmazsa gövde puntolarını ve boşlukları kademeli küçültür (alt bilgiye ve güvenli alana taşma olmasın).
 export function compileRecipe(recipe, ctx) {
   let best;
-  for (const scale of [1, 0.92, 0.85, 0.78, 0.72]) {
+  const tall = ctx.format === 'story' || ctx.format === 'reel';
+  for (const scale of [...(tall ? [1.5, 1.4, 1.32] : []), 1.25, 1.18, 1.1, 1.04, 1, 0.92, 0.85, 0.78, 0.72]) {
     const ops = compileOnce(recipe, ctx, scale);
     if (ops.fits) { ops.scale = scale; return ops; }
     best = ops;
@@ -192,7 +263,7 @@ export function compileRecipe(recipe, ctx) {
 }
 
 function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPath, heroImagePath }, scale = 1) {
-  const T = colorTokens(brand);
+  const T = colorTokens(brand, { paper: recipe.paper });
   const M = metrics(format);
   const font = brand.font_family && /^[\w .-]{2,60}$/.test(brand.font_family) ? brand.font_family : undefined;
   const ops = [{ op: 'doc.create', args: { name: `${brand.name}_${format}`.slice(0, 100), width: M.w, height: M.h, resolution: 72 } }];
@@ -235,7 +306,7 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
       const hRaw = pick(item.h, format);
       const h = item.hMode === 'frac' || hRaw === 'full' ? Math.round((hRaw === 'full' ? 1 : hRaw) * M.h) : hRaw;
       const w = item.w === 'full' ? M.w : item.w === 'content' ? M.contentW : item.w;
-      const x = item.x === 'left' ? (item.w === 'full' ? 0 : M.mx) : item.x === 'center' ? Math.round((M.w - w) / 2) : M.mx;
+      const x = item.x === 'edge' ? 0 : item.x === 'left' ? (item.w === 'full' ? 0 : M.mx) : item.x === 'center' ? Math.round((M.w - w) / 2) : M.mx;
       const args = { name: item.name, x, w, h, color: col(item.color), ...(item.opacity !== undefined ? { opacity: item.opacity } : {}) };
       let top;
       if (a.bottom) top = M.safeBottomY - (a.offset || 0) - h;
@@ -326,7 +397,8 @@ function compileOnce(recipe, { brand, copy = {}, format = 'post', psdPath, pngPa
   const limit = (url ? url.top - 24 : M.safeBottomY);
   const [sxm] = SAFE[format] || SAFE.default;
   const sideOk = [...emitted.values()].filter(b => b.text).every(b => b.left >= M.w * sxm - 2 && b.right <= M.w * (1 - sxm) + 2);
-  ops.fits = flowBottom <= limit && sideOk;
+  const withinOk = recipe.items.every(it => !it.within || !emitted.has(it.name) || !emitted.has(it.within) || emitted.get(it.name).bottom <= emitted.get(it.within).bottom - 40);
+  ops.fits = flowBottom <= limit && sideOk && withinOk;
   return ops;
 }
 
