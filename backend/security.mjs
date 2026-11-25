@@ -26,14 +26,19 @@ export function maskSecret(value) {
 }
 
 // Gerçek yolu (symlink çözülmüş) döndürür; yoksa en yakın var olan atanın gerçek yolu + kalan.
+// Hedefi olmayan (kırık) bir symlink güvenilmez sayılır: null döner.
 function realish(p) {
   const abs = path.resolve(p);
   try {
     return fs.realpathSync(abs);
   } catch {
+    try {
+      if (fs.lstatSync(abs).isSymbolicLink()) return null;
+    } catch {}
     const parent = path.dirname(abs);
     if (parent === abs) return abs;
-    return path.join(realish(parent), path.basename(abs));
+    const up = realish(parent);
+    return up === null ? null : path.join(up, path.basename(abs));
   }
 }
 
@@ -41,6 +46,7 @@ export function isInside(root, target) {
   if (!root || !target) return false;
   const r = realish(root);
   const t = realish(target);
+  if (r === null || t === null) return false;
   const rel = path.relative(r, t);
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }

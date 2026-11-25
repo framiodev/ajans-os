@@ -22,9 +22,17 @@ test('isInside: kök içi/dışı ve .. kaçışı', () => {
   assert.ok(isInside(root, path.join(root, 'a', 'b.png')));
   assert.ok(!isInside(root, path.join(root, '..', 'x.png')));
   assert.ok(!isInside(root, '/etc/passwd'));
+  // Kök dışındaki gerçek bir klasöre giden symlink/junction (Windows'ta junction yönetici izni istemez)
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ajans-out-'));
+  fs.writeFileSync(path.join(outside, 'secret.txt'), 'x');
   const link = path.join(root, 'link');
-  fs.symlinkSync('/etc', link);
-  assert.ok(!isInside(root, path.join(link, 'passwd')));
+  fs.symlinkSync(outside, link, 'junction');
+  assert.ok(!isInside(root, path.join(link, 'secret.txt')));
+  // Hedefi olmayan (kırık) symlink de içeride sayılmaz
+  const dangling = path.join(root, 'dangling');
+  let danglingCreated = true;
+  try { fs.symlinkSync(path.join(os.tmpdir(), 'ajans-yok-' + Date.now()), dangling, 'junction'); } catch { danglingCreated = false; }
+  if (danglingCreated) assert.ok(!isInside(root, path.join(dangling, 'x.png')));
 });
 
 test('HTML kaçışı ve renk doğrulama', () => {
