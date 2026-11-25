@@ -2,7 +2,7 @@
   "manifestVersion": 5,
   "id": "com.framiomedia.ajansos.bridge",
   "name": "AjansOS Köprüsü",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "index.html",
   "host": { "app": "PS", "minVersion": "24.0.0" },
   "entrypoints": [
