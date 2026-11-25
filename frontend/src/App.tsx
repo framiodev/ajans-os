@@ -36,14 +36,6 @@ interface OutputFile {
   size: number;
 }
 
-interface Recipe {
-  id: string;
-  title: string;
-  source_url: string;
-  source_type: string;
-  steps_count: number;
-}
-
 interface StrategyItem {
   id: string;
   brand_id: string;
@@ -87,7 +79,6 @@ export default function App() {
   const [view, setView] = useState<ViewId>('studio');
   const [brands, setBrands] = useState<Brand[]>([]);
   const [activeBrandId, setActiveBrandId] = useState<string>('vega');
-  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [format, setFormat] = useState<FormatId>('post');
   const [showGrid, setShowGrid] = useState(false);
@@ -166,7 +157,6 @@ export default function App() {
       setBrands(data);
       if (data.length > 0) setActiveBrandId(data[0].id);
     }).catch(() => {});
-    fetch('/api/recipes').then(r => r.json()).then(setRecipes).catch(() => {});
     fetch('/api/settings').then(r => r.json()).then(setSettings).catch(() => {});
     fetch('/api/health').then(r => r.json()).then(d => { if (d.version) setAppVersion(d.version); }).catch(() => {});
     loadOutputs();
@@ -964,12 +954,12 @@ export default function App() {
           <div className="flex-1 p-6 overflow-y-auto space-y-5">
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-2 text-xs">
               <h2 className="text-sm font-bold">Öğrenme Kütüphanesi</h2>
-              <p className="text-zinc-400">Video ve görsel öğrenme henüz etkin değil; bu bölüm gerçek öğrenici bağlanınca çalışacak. Aşağıdaki liste yalnızca başlangıçta elle eklenmiş eğitim kaynaklarının başlıklarıdır; üretimde kullanılmaz.</p>
+              <p className="text-zinc-400">Video ve görsel öğrenme henüz etkin değil; bu bölüm gerçek öğrenici bağlanınca çalışacak. Aşağıdaki liste şu an kullanılabilen yerleşik düzen tarifleridir.</p>
               <div className="space-y-2 pt-2">
                 {recipes.map(r => (
                   <div key={r.id} className="p-2.5 rounded-lg bg-zinc-950 border border-zinc-800 flex justify-between">
-                    <span>{r.title}</span>
-                    <span className="font-mono text-zinc-500">{r.steps_count} Adım</span>
+                    <span>{r.name}</span>
+                    <span className="text-zinc-500">{r.description}</span>
                   </div>
                 ))}
               </div>
