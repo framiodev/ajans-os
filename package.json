@@ -1,6 +1,6 @@
 {
   "name": "framiomedia-ajansos",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "FramioMedia AjansOS Studio - Yapay Zeka Reklam Ajansi ve Adobe MCP",
   "author": "FramioMedia",
   "main": "electron/main.cjs",
@@ -42,6 +42,7 @@
       "package.json"
     ],
     "win": {
+      "artifactName": "FramioMedia-AjansOS-Setup-${version}.${ext}",
       "target": [
         {
           "target": "nsis",
