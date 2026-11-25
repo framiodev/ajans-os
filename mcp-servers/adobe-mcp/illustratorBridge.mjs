@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { safeFormat, safeSegment } from '../../backend/security.mjs';
 
 function escapeJsx(str = '') {
   return String(str).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\r');
@@ -21,10 +22,11 @@ function runIllustratorJsx(jsxCode) {
 }
 
 export async function generateVectorPostAi({ brand, copy, format = 'post', outputDir }) {
+  format = safeFormat(format);
   const dims =
     format === 'story' ? { w: 1080, h: 1920 } : format === 'linkedin' ? { w: 1920, h: 1080 } : { w: 1080, h: 1350 };
 
-  const safeName = `${brand.id}_${format}_${Date.now()}`;
+  const safeName = `${safeSegment(brand.id, 'brand')}_${format}_${Date.now()}`;
   const aiPath = path.join(outputDir, `${safeName}.ai`).replace(/\\/g, '/');
 
   const jsx = `
@@ -41,7 +43,7 @@ export async function generateVectorPostAi({ brand, copy, format = 'post', outpu
     descFrame.left = 90;
     descFrame.textRange.characterAttributes.size = 28;
 
-    doc.saveAs(new File("${aiPath}"), new IllustratorSaveOptions());
+    doc.saveAs(new File("${escapeJsx(aiPath)}"), new IllustratorSaveOptions());
   `;
 
   await fs.mkdir(outputDir, { recursive: true });

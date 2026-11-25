@@ -1,15 +1,18 @@
 # FramioMedia — AjansOS Studio
 
-Yapay zeka destekli tam otomatik reklam ajansı ve Adobe Photoshop / Illustrator / Firefly MCP platformu.
+Sosyal medya içerik planlama ve Adobe Photoshop ile katmanlı PSD üretimi. Yol haritası: `claude/ajans-os-revizyon-plani.md` (Claude Project dokümanı).
 
-## Klasör Yapısı
-- `frontend/` — React + TypeScript + Tailwind CSS (AjansOS Studio arayüzü, `http://localhost:4000`)
-- `backend/` — Node.js + Express + SQLite (Strateji, Vision QA, Trend Araştırması, Excel/PDF İhracat, `http://localhost:4010`)
-- `mcp-servers/adobe-mcp/` — Windows COM + ExtendScript üzerinden Adobe Photoshop & Illustrator MCP köprüleri ve Adobe Firefly servisi
-- `design-memory/` — YouTube eğitimlerinden çıkarılan JSON tasarım reçeteleri
-- `storage/` — SQLite veritabanı (`ajansos.db`) ve üretilen PSD, AI, PNG, CSV, PDF çıktıları (`storage/outputs/`)
+## Klasörler
+- `frontend/` — React + TypeScript + Tailwind (geliştirmede `http://localhost:4000`)
+- `backend/` — Node.js + Express + SQLite (`node:sqlite`; geliştirmede `http://127.0.0.1:4010`)
+- `mcp-servers/adobe-mcp/` — Photoshop / Illustrator köprüleri (ExtendScript; UXP köprüsüne geçiliyor)
+- `design-memory/` — başlangıç eğitim kaynağı başlıkları
+- `electron/` — masaüstü kabuğu (paketli sürüm `http://127.0.0.1:4190`)
 
-## Hızlı Başlatma
-1. `start-ajansos.bat` dosyasına çift tıklayın.
-2. Tarayıcı otomatik olarak `http://localhost:4000` adresinde **AjansOS Studio**'yu açacaktır.
-3. Canlı yapay zeka moduna geçmek için sol menüden **MCP & API Bağlantıları** ekranına **Gemini**, **Claude** ve **Adobe Firefly** API anahtarlarınızı girip kaydedin.
+## Geliştirme
+Gereksinim: Node.js **22.13 veya üzeri**.
+1. `npm ci` (kök), `cd backend && npm ci`, `cd frontend && npm ci`
+2. `start-ajansos.bat` (Windows) veya iki terminalde `backend: npm start`, `frontend: npm run dev`
+3. Testler: `npm test` (backend), tip denetimi: `cd frontend && npm run typecheck`
+
+API anahtarları (Gemini, Claude) uygulamada **API Bağlantıları** ekranından girilir; yerel veritabanında saklanır.

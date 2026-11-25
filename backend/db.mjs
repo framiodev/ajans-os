@@ -36,9 +36,20 @@ db.exec(`
     brand_id TEXT NOT NULL,
     title TEXT NOT NULL,
     brief TEXT NOT NULL,
-    status TEXT DEFAULT 'ready',
-    qa_score INTEGER DEFAULT 96,
+    status TEXT DEFAULT 'draft',
+    qa_score INTEGER,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS cost_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT DEFAULT CURRENT_TIMESTAMP,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    purpose TEXT DEFAULT '',
+    brand_id TEXT DEFAULT ''
   );
 
   CREATE TABLE IF NOT EXISTS recipes (
@@ -102,10 +113,6 @@ try {
 const defaultSettings = [
   ['gemini_api_key', ''],
   ['claude_api_key', ''],
-  ['firefly_api_key', ''],
-  ['photoshop_mcp_status', 'ready'],
-  ['illustrator_mcp_status', 'ready'],
-  ['output_dir', 'D:\\Programlar\\FramioMedia\\AjansOS\\storage\\outputs']
 ];
 const upsertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 for (const [k, v] of defaultSettings) {

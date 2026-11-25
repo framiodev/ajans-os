@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -9,9 +8,8 @@ import { generateStrategyAndCalendar } from './services/aiProvider.mjs';
 import { buildCalendarCsv, buildProposalHtml } from './services/exporter.mjs';
 import { generatePostPsd, generateProEditorialJsx, revisePhotoshopLayer } from '../mcp-servers/adobe-mcp/photoshopBridge.mjs';
 import { generateVectorPostAi } from '../mcp-servers/adobe-mcp/illustratorBridge.mjs';
-import { generateFireflyScene, enhanceOrRecreateWithFirefly } from '../mcp-servers/adobe-mcp/fireflyService.mjs';
+import { localOnly, validatedPath, isSecretKey, maskSecret } from './security.mjs';
 import { evaluateDesign } from './services/visionQa.mjs';
-import { extractYoutubeRecipe, researchTrends } from './services/designLearner.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.AJANSOS_DATA_DIR || path.resolve(__dirname, '../storage');
@@ -21,26 +19,26 @@ const FRONTEND_DIST = path.resolve(__dirname, '../frontend/dist');
 const app = express();
 const PORT = process.env.PORT || 4010;
 
-app.use(cors());
-app.use(express.json());
+app.use(localOnly);
+app.use(express.json({ limit: '1mb' }));
+
+const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
+function allowedImageRoots() {
+  const roots = [OUTPUT_DIR];
+  for (const r of db.prepare('SELECT assets_dir FROM brands').all()) if (r.assets_dir) roots.push(r.assets_dir);
+  return roots;
+}
+
 
 // Health & Status
 app.get('/api/health', (_req, res) => {
-  let version = '1.2.3';
+  let version = 'bilinmiyor';
   try {
     version = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8')).version || version;
   } catch {}
-  res.json({
-    ok: true,
-    app: 'FramioMedia AjansOS Backend',
-    version,
-    services: {
-      database: 'connected',
-      photoshopMcp: 'ready',
-      illustratorMcp: 'ready',
-      firefly: 'configured'
-    }
-  });
+  const row = db.prepare('SELECT COUNT(*) AS n FROM brands').get();
+  res.json({ ok: true, app: 'FramioMedia AjansOS Backend', version, database: { ok: true, brands: row.n } });
 });
 
 // Brands CRUD
@@ -113,9 +111,9 @@ app.get('/api/brands/:id/assets', (req, res) => {
 });
 
 app.get('/api/asset-file', (req, res) => {
-  const filePath = String(req.query.path || '');
-  if (!filePath || !fs.existsSync(filePath)) return res.status(404).send('Not found');
-  res.sendFile(path.resolve(filePath));
+  const filePath = validatedPath(req.query.path, allowedImageRoots(), IMAGE_EXTS);
+  if (!filePath) return res.status(404).send('Not found');
+  res.sendFile(filePath);
 });
 
 app.get('/api/outputs', (_req, res) => {
@@ -139,7 +137,9 @@ app.post('/api/adobe/photoshop/pro-jsx', async (req, res) => {
     const { brand_id, copy, format, heroImagePath } = req.body || {};
     const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
     if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
-    const result = await generateProEditorialJsx({ brand, copy: copy || {}, format: format || 'post', heroImagePath: heroImagePath || '', outputDir: OUTPUT_DIR });
+    const hero = heroImagePath ? validatedPath(heroImagePath, allowedImageRoots(), IMAGE_EXTS) : '';
+    if (heroImagePath && !hero) return res.status(400).json({ ok: false, error: 'Gecersiz gorsel yolu' });
+    const result = await generateProEditorialJsx({ brand, copy: copy || {}, format: format || 'post', heroImagePath: hero || '', outputDir: OUTPUT_DIR });
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -156,13 +156,14 @@ app.delete('/api/brands/:id', (req, res) => {
 app.get('/api/settings', (_req, res) => {
   const rows = db.prepare('SELECT key, value FROM settings').all();
   const obj = {};
-  for (const r of rows) obj[r.key] = r.value;
+  for (const r of rows) obj[r.key] = isSecretKey(r.key) ? maskSecret(r.value) : r.value;
   res.json(obj);
 });
 
 app.post('/api/settings', (req, res) => {
   const stmt = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
   for (const [k, v] of Object.entries(req.body || {})) {
+    if (isSecretKey(k) && String(v ?? '').startsWith('••••')) continue; // maskelenmiş değer geri gönderildi, değiştirme
     stmt.run(k, String(v ?? ''));
   }
   res.json({ saved: true });
@@ -197,7 +198,7 @@ app.post('/api/campaigns', (req, res) => {
   const id = 'cmp-' + crypto.randomBytes(3).toString('hex');
   db.prepare(`
     INSERT INTO campaigns (id, brand_id, title, brief, status, qa_score)
-    VALUES (?, ?, ?, ?, 'completed', 96)
+    VALUES (?, ?, ?, ?, 'draft', NULL)
   `).run(id, brand_id || 'vega', title || 'Yeni Kampanya', brief || '');
   const created = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(id);
   res.status(201).json(created);
@@ -233,7 +234,7 @@ app.post('/api/strategy/generate', async (req, res) => {
   }
 
   const saved = db.prepare('SELECT * FROM strategy_items WHERE brand_id = ? ORDER BY day ASC').all(brand.id);
-  res.json({ mode: result.mode, summary: result.summary, items: saved });
+  res.json({ mode: result.mode, summary: result.summary, items: saved, failures: result.failures || [] });
 });
 
 app.get('/api/strategy/:brandId', (req, res) => {
@@ -279,7 +280,9 @@ app.post('/api/adobe/photoshop/revise', async (req, res) => {
     if (!psdPath) {
       return res.json({ ok: true, simulated: true, message: `Revize kaydedildi (Önce PSD üretin): "${instruction}"` });
     }
-    const result = await revisePhotoshopLayer({ psdPath, instruction });
+    const safePsd = validatedPath(psdPath, [OUTPUT_DIR], new Set(['.psd']));
+    if (!safePsd) return res.status(400).json({ ok: false, error: 'Gecersiz PSD yolu (yalnizca cikti klasoru)' });
+    const result = await revisePhotoshopLayer({ psdPath: safePsd, instruction: String(instruction || '').slice(0, 500) });
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -298,24 +301,6 @@ app.post('/api/adobe/illustrator/create', async (req, res) => {
   }
 });
 
-app.post('/api/adobe/firefly/enhance', async (req, res) => {
-  try {
-    const { brand_id, heroImagePath, action, format } = req.body || {};
-    const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
-    if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
-    const result = await enhanceOrRecreateWithFirefly({ brand, heroImagePath, action: action || 'recompose', format: format || 'post' });
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-app.get('/api/knowledge/adobe-2027', (_req, res) => {
-  const kPath = path.resolve(__dirname, '../design-memory/adobe_2027_knowledge.json');
-  if (!fs.existsSync(kPath)) return res.json({ photoshop_2027: [], firefly_2027: [], creative_cloud_mcp_2027: [] });
-  res.json(JSON.parse(fs.readFileSync(kPath, 'utf8')));
-});
-
 app.get('/api/system/check-update', async (_req, res) => {
   try {
     if (typeof global.triggerAjansUpdateCheck === 'function') {
@@ -324,21 +309,9 @@ app.get('/api/system/check-update', async (_req, res) => {
     }
     const pkgPath = path.resolve(__dirname, '../package.json');
     const currentVersion = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version || '1.2.5';
-    res.json({ ok: true, currentVersion, message: `Uygulama güncel (v${currentVersion})` });
+    res.json({ ok: true, currentVersion, message: `Sürüm v${currentVersion}. Güncelleme denetimi yalnızca kurulu uygulamada çalışır (geliştirme modunda kontrol edilmez).` });
   } catch (err) {
     res.json({ ok: false, message: 'Güncelleme kontrolü yapılamadı: ' + err.message });
-  }
-});
-
-app.post('/api/adobe/firefly/generate', async (req, res) => {
-  try {
-    const { brand_id, prompt, format } = req.body || {};
-    const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
-    if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
-    const result = await generateFireflyScene({ brand, prompt, format: format || 'post' });
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
   }
 });
 
@@ -348,39 +321,16 @@ app.post('/api/qa/evaluate', async (req, res) => {
     const { brand_id, pngPath, psdPath, copy } = req.body || {};
     const brand = db.prepare('SELECT * FROM brands WHERE id = ?').get(brand_id || 'vega');
     if (!brand) return res.status(404).json({ error: 'Marka bulunamadi' });
-    const qa = await evaluateDesign({ pngPath, brand, copy });
+    const safePng = pngPath ? validatedPath(pngPath, [OUTPUT_DIR], new Set(['.png'])) : null;
+    if (pngPath && !safePng) return res.status(400).json({ ok: false, error: 'Gecersiz PNG yolu (yalnizca cikti klasoru)' });
+    const safePsd = psdPath ? validatedPath(psdPath, [OUTPUT_DIR], new Set(['.psd'])) : null;
+    const qa = await evaluateDesign({ pngPath: safePng, brand, copy });
     let autoFixed = false;
-    if (!qa.passed && psdPath && qa.autoFixInstruction) {
-      await revisePhotoshopLayer({ psdPath, instruction: qa.autoFixInstruction });
+    if (!qa.passed && safePsd && qa.autoFixInstruction) {
+      await revisePhotoshopLayer({ psdPath: safePsd, instruction: qa.autoFixInstruction });
       autoFixed = true;
     }
     res.json({ ok: true, autoFixed, ...qa });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-app.post('/api/memory/youtube', async (req, res) => {
-  try {
-    const { url, topic } = req.body || {};
-    const extracted = await extractYoutubeRecipe({ url, topic });
-    const id = 'rec-' + crypto.randomBytes(3).toString('hex');
-    db.prepare(`
-      INSERT INTO recipes (id, title, source_url, source_type, steps_count, steps_json)
-      VALUES (?, ?, ?, 'youtube', ?, ?)
-    `).run(id, extracted.title, url || '', extracted.steps.length, JSON.stringify(extracted.steps));
-    const created = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id);
-    res.status(201).json({ ok: true, mode: extracted.mode, recipe: created, steps: extracted.steps });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-app.post('/api/memory/trends', async (req, res) => {
-  try {
-    const { sector, sources } = req.body || {};
-    const result = await researchTrends({ sector: sector || 'Genel', sources });
-    res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -393,6 +343,6 @@ if (fs.existsSync(FRONTEND_DIST)) {
   });
 }
 
-app.listen(PORT, () => {
-  console.log(`AjansOS Backend calisiyor: http://localhost:${PORT}`);
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`AjansOS Backend calisiyor: http://127.0.0.1:${PORT}`);
 });
