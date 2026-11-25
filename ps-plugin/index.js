@@ -3,7 +3,7 @@ const photoshop = require('photoshop');
 const uxp = require('uxp');
 const { app, core, action, constants } = photoshop;
 const fsx = uxp.storage.localFileSystem;
-const PLUGIN_VERSION = '0.1.2';
+const PLUGIN_VERSION = '0.1.3';
 // Photoshop 28'de app.version boş gelebiliyor; sırayla farklı kaynaklardan oku.
 function psVersion() {
   try {
@@ -209,32 +209,47 @@ async function handle(msg) {
 }
 
 // ---------- bağlantı ----------
+let reconnectTimer = null;
+
 function connect() {
   const port = ($('port').value || '4190').trim();
   const token = $('token').value.trim();
   if (!token) { setStatus('Anahtar gerekli', 'err'); return; }
   store('ajansos.port', port); store('ajansos.token', token);
   wantConnected = true;
-  try { if (ws) ws.close(); } catch (e) {}
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  // Eski bağlantının olayları yenisini bozmasın: önce dinleyicileri sök, sonra kapat.
+  const old = ws;
+  if (old) {
+    old.onopen = old.onmessage = old.onclose = old.onerror = null;
+    try { old.close(); } catch (e) {}
+  }
   setStatus('Bağlanıyor…');
-  ws = new WebSocket('ws://localhost:' + port + '/ps?token=' + encodeURIComponent(token));
-  ws.onopen = () => {
+  const sock = new WebSocket('ws://localhost:' + port + '/ps?token=' + encodeURIComponent(token));
+  ws = sock;
+  sock.onopen = () => {
+    if (ws !== sock) return;
     retry = 0;
-    ws.send(JSON.stringify({ type: 'hello', plugin: PLUGIN_VERSION, photoshop: psVersion(), uxp: String(uxp.versions.uxp) }));
+    sock.send(JSON.stringify({ type: 'hello', plugin: PLUGIN_VERSION, photoshop: psVersion(), uxp: String(uxp.versions.uxp) }));
     setStatus('Bağlı — Photoshop ' + psVersion(), 'ok');
     log('Bağlandı');
   };
-  ws.onmessage = async ev => {
+  sock.onmessage = async ev => {
     let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
     if (msg.type !== 'req') return;
     log(msg.op);
-    ws.send(JSON.stringify(await handle(msg)));
+    const res = await handle(msg);
+    if (ws === sock) sock.send(JSON.stringify(res));
   };
-  ws.onclose = () => {
+  sock.onclose = () => {
+    if (ws !== sock) return; // yerini yeni bağlantı almış
     setStatus('Bağlantı kapandı', 'err');
-    if (wantConnected) { retry = Math.min(retry + 1, 6); setTimeout(() => { if (wantConnected) connect(); }, 1000 * retry); }
+    if (wantConnected && !reconnectTimer) {
+      retry = Math.min(retry + 1, 6);
+      reconnectTimer = setTimeout(() => { reconnectTimer = null; if (wantConnected) connect(); }, 1000 * retry);
+    }
   };
-  ws.onerror = () => { log('Bağlantı hatası (uygulama açık mı, port ve anahtar doğru mu?)'); };
+  sock.onerror = () => { log('Bağlantı hatası (uygulama açık mı, port ve anahtar doğru mu?)'); };
 }
 
 $('port').value = load('ajansos.port', '4190');
