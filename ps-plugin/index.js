@@ -3,7 +3,14 @@ const photoshop = require('photoshop');
 const uxp = require('uxp');
 const { app, core, action, constants } = photoshop;
 const fsx = uxp.storage.localFileSystem;
-const PLUGIN_VERSION = '0.1.0';
+const PLUGIN_VERSION = '0.1.1';
+// Photoshop 28'de app.version boş gelebiliyor; sırayla farklı kaynaklardan oku.
+function psVersion() {
+  try {
+    const v = app.version || (uxp.host && uxp.host.version) || (photoshop.versions && photoshop.versions.photoshop);
+    return v ? String(v) : 'bilinmiyor';
+  } catch { return 'bilinmiyor'; }
+}
 
 const $ = id => document.getElementById(id);
 let ws = null, wantConnected = false, retry = 0;
@@ -81,7 +88,7 @@ function findLayer(name, layers) {
 
 // ---------- işlemler ----------
 const handlers = {
-  async ping() { return { pong: true, photoshop: app.version, hasDoc: !!app.activeDocument }; },
+  async ping() { return { pong: true, photoshop: psVersion(), hasDoc: !!app.activeDocument }; },
 
   async 'doc.snapshot'() {
     const d = activeDoc();
@@ -206,8 +213,8 @@ function connect() {
   ws = new WebSocket('ws://localhost:' + port + '/ps?token=' + encodeURIComponent(token));
   ws.onopen = () => {
     retry = 0;
-    ws.send(JSON.stringify({ type: 'hello', plugin: PLUGIN_VERSION, photoshop: String(app.version), uxp: String(uxp.versions.uxp) }));
-    setStatus('Bağlı — Photoshop ' + app.version, 'ok');
+    ws.send(JSON.stringify({ type: 'hello', plugin: PLUGIN_VERSION, photoshop: psVersion(), uxp: String(uxp.versions.uxp) }));
+    setStatus('Bağlı — Photoshop ' + psVersion(), 'ok');
     log('Bağlandı');
   };
   ws.onmessage = async ev => {
