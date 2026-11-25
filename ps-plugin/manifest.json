@@ -10,8 +10,9 @@
       "type": "panel",
       "id": "ajansosPanel",
       "label": { "default": "AjansOS" },
-      "minimumSize": { "width": 230, "height": 260 },
-      "preferredDockedSize": { "width": 280, "height": 320 }
+      "minimumSize": { "width": 230, "height": 160 },
+      "preferredDockedSize": { "width": 280, "height": 360 },
+      "preferredFloatingSize": { "width": 300, "height": 380 }
     }
   ],
   "requiredPermissions": {
