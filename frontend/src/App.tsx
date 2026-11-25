@@ -96,6 +96,8 @@ export default function App() {
   const [lastPsdPath, setLastPsdPath] = useState('');
   const [qaScore, setQaScore] = useState<number | null>(null);
   const [qaBars, setQaBars] = useState<Record<string, number> | null>(null);
+  const [psStatus, setPsStatus] = useState<{ connected: boolean; photoshop?: string; plugin?: string }>({ connected: false });
+  const [psInfo, setPsInfo] = useState<{ token: string; port: number } | null>(null);
   const [qaChecks, setQaChecks] = useState<{ id: string; label: string; ok: boolean; detail?: string }[]>([]);
   const [qaCritique, setQaCritique] = useState('Henüz denetim yapılmadı.');
   const [brandAssets, setBrandAssets] = useState<AssetFile[]>([]);
@@ -126,6 +128,20 @@ export default function App() {
   const loadOutputs = () => {
     fetch('/api/outputs').then(r => r.json()).then(setOutputFiles).catch(() => {});
   };
+
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const r = await fetch('/api/ps/status');
+        if (alive && r.ok) setPsStatus(await r.json());
+      } catch {}
+    };
+    poll();
+    fetch('/api/ps/info').then(r => (r.ok ? r.json() : null)).then(j => { if (alive && j) setPsInfo(j); }).catch(() => {});
+    const t = setInterval(poll, 3000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
 
   useEffect(() => {
     fetch('/api/brands').then(r => r.json()).then((data: Brand[]) => {
@@ -246,6 +262,31 @@ export default function App() {
   };
 
   const handleCreatePsd = async () => {
+    if (psStatus.connected) {
+      notify('Photoshop\'ta PSD üretiliyor...');
+      try {
+        const res = await fetch('/api/ps/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ brand_id: activeBrand.id, copy, format })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setLastPsdPath(data.psdPath);
+          setQaChecks(data.lint.checks);
+          setQaScore(null);
+          setQaBars(null);
+          setQaCritique(data.lint.ok ? 'PSD hijyen denetimi geçti. Görsel kalite için QA Denetle.' : `PSD hijyen denetimi başarısız: ${data.lint.criticalFailed.join(', ')}`);
+          loadOutputs();
+          notify(data.lint.ok ? 'PSD üretildi ve hijyen denetiminden geçti.' : 'PSD üretildi ama hijyen denetimi başarısız.');
+        } else {
+          notify(`Photoshop hatası: ${data.error}`);
+        }
+      } catch {
+        notify('Backend bağlantı hatası.');
+      }
+      return;
+    }
     notify('Pro Editoryal Photoshop Scripti (.jsx) üretiliyor...');
     try {
       const res = await fetch('/api/adobe/photoshop/pro-jsx', {
@@ -312,6 +353,29 @@ export default function App() {
   const handleRevision = async () => {
     const val = revInput.trim();
     if (!val) { setRevStatus('Önce revize talimatı yazın.'); return; }
+    if (psStatus.connected) {
+      setRevStatus('Photoshop katmanı güncelliyor...');
+      try {
+        const res = await fetch('/api/ps/revise', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ instruction: val, psdPath: lastPsdPath, format })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setRevStatus(`${data.layer}: punto ${data.sizeBefore} → ${data.sizeAfter} (Photoshop'tan doğrulandı).`);
+          setQaChecks(data.lint.checks);
+          setQaScore(null);
+          setQaBars(null);
+          setRevInput('');
+        } else {
+          setRevStatus(`Hata: ${data.error}`);
+        }
+      } catch {
+        setRevStatus('Backend bağlantı hatası.');
+      }
+      return;
+    }
     setRevStatus('Photoshop MCP katmanları güncelliyor...');
     try {
       const res = await fetch('/api/adobe/photoshop/revise', {
@@ -453,6 +517,7 @@ export default function App() {
         </div>
 
         <div className="p-3.5 border-t border-zinc-800 space-y-2 text-[11px]">
+          <div className="flex justify-between"><span className="text-zinc-400">Photoshop</span><span className={psStatus.connected ? 'text-emerald-400 font-medium' : 'text-zinc-500'}>{psStatus.connected ? `Bağlı ${psStatus.photoshop || ''}` : 'Bağlı değil'}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Sürüm</span><span className="text-zinc-200 font-mono">v{appVersion}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Gemini</span><span className={settings.gemini_api_key ? 'text-emerald-400 font-medium' : 'text-zinc-500'}>{settings.gemini_api_key ? 'Anahtar var' : 'Anahtar yok'}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Claude</span><span className={settings.claude_api_key ? 'text-emerald-400 font-medium' : 'text-zinc-500'}>{settings.claude_api_key ? 'Anahtar var' : 'Anahtar yok'}</span></div>
@@ -853,6 +918,19 @@ export default function App() {
         {view === 'integrations' && (
           <div className="flex-1 p-6 overflow-y-auto">
             <div className="max-w-xl bg-zinc-900/50 border border-zinc-800 rounded-xl p-5 space-y-4 text-xs">
+              <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800 space-y-2">
+                <div className="font-semibold">Photoshop Köprüsü (UXP eklentisi)</div>
+                <div className={psStatus.connected ? 'text-emerald-400' : 'text-zinc-400'}>
+                  {psStatus.connected ? `Bağlı — Photoshop ${psStatus.photoshop}, eklenti ${psStatus.plugin}` : 'Bağlı değil. Kurulum: docs/ps-plugin-kurulum.md'}
+                </div>
+                {psInfo && (
+                  <div className="space-y-1">
+                    <div className="text-zinc-400">Port: <span className="font-mono text-zinc-200">{psInfo.port}</span></div>
+                    <div className="text-zinc-400">Bağlantı anahtarı (eklenti paneline yapıştırın):</div>
+                    <input readOnly value={psInfo.token} onFocus={e => e.currentTarget.select()} className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 font-mono" />
+                  </div>
+                )}
+              </div>
               <h2 className="text-sm font-bold">Gemini & Claude API Ayarları</h2>
               <label className="block space-y-1">
                 <span className="text-zinc-400">Google Gemini API Key</span>
